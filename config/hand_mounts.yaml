@@ -1,0 +1,8 @@
+# Mock preview placeholders. Measure each flange transform before using this
+# description for physical motion planning or collision decisions.
+left:
+  xyz: [0.0, 0.0, 0.0]
+  rpy: [0.0, 0.0, 0.0]
+right:
+  xyz: [0.0, 0.0, 0.0]
+  rpy: [0.0, 0.0, 0.0]
