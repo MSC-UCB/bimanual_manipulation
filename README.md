@@ -60,6 +60,7 @@ mock 的所有测试终端使用同一个隔离域；真机终端使用设备原
 | `left_robot_ip` / `right_robot_ip` | 留空，沿用机械臂 launch；当前为 `192.168.2.100` / `192.168.1.100` |
 | `method` / `input_rate_hz` | 留空，沿用机械臂 launch；当前为 `quintic` / `100.0` |
 | `ruckig_target_mode` / `ruckig_target_timeout` | 留空，沿用机械臂 launch |
+| `collision_force_limit` / `collision_force_threshold_n` | 留空，沿用机械臂 launch；默认开启、`20.0` N |
 | `sharpa_config` | 留空，由手部 backend 选择原包 YAML |
 | `sharpa_publish_rate_hz` | 留空，保留手部 YAML 发布频率 |
 | `sharpa_read_only` | `false`；可单独启用手部只读，全局 `read_only=true` 优先 |
@@ -75,6 +76,27 @@ mock 的所有测试终端使用同一个隔离域；真机终端使用设备原
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py --show-args
 ```
+
+## 双臂碰撞力限制
+
+系统 launch 会一起启动 `dual_crx_control` 的 limiter，不需要另外启动节点：
+
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  crx_mock:=false sharpa_backend:=sharpa_sdk \
+  collision_force_limit:=true collision_force_threshold_n:=20.0
+```
+
+任一 CRX 手臂的 `|Fx|`、`|Fy|` 或 `|Fz|` 超过门槛，会停止两臂并关闭 Stream Motion。
+双侧驱动与有效力回授就绪后先忽略 3 秒，等 `/crx5ia/collision_force_limiter/state`
+显示 `ARMED` 再开始运动；这段时间不是回默认位动作的豁免，也没有阻挡外部命令的 gate。
+启用后无效力回授或超过 0.2 秒断讯也会触发停止。触发后不自动恢复，先停止外部命令来源、
+解除接触再重启 launch。正常触发只停止 CRX，不停止 Sharpa 手指；limiter 意外退出或
+停止失败则会关闭整个系统 launch。`read_only:=true` 时不启动 limiter。
+
+普通 mock 演示没有有效力回授时，请加 `collision_force_limit:=false`；否则可能因 mock wrench
+为 NaN，一直等待并在 180 秒启动超时后关闭 launch。力限制测试使用独立的合成 wrench。
+该功能通过 ROS service 停止，不是硬件急停；实机停止延迟仍需在受控条件下验证。
 
 ## 回默认位
 

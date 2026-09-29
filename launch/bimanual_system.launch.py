@@ -12,7 +12,8 @@ from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
 ARM_OVERRIDES = ('left_robot_ip', 'right_robot_ip', 'method', 'input_rate_hz',
-                 'ruckig_target_mode', 'ruckig_target_timeout')
+                 'ruckig_target_mode', 'ruckig_target_timeout',
+                 'collision_force_limit', 'collision_force_threshold_n')
 
 
 def _include(package, file, arguments):
