@@ -1,58 +1,163 @@
-# Bimanual manipulation: first mock integration
+# 双臂、双手统一启动与传感器显示
 
-This ROS 2 Jazzy package combines the local `dual_crx_control` and
-`dual_sharpa_wave` packages. The system launch starts both existing control
-stacks and publishes one full robot description/TF tree. It sends **no motion
-command**. Run `hold_and_test` separately to hold all four devices at their
-initial measured positions.
+本包组合 `dual_crx_control` 与 `dual_sharpa_wave`，提供一个系统 launch、一个回默认位脚本和一个力/力矩与触觉查看器。驱动仍由原包提供，组合 URDF 包含 56 个活动关节。
 
-The checked-out CRX interface is `/crx5ia/joint_targets` (`JointState`), not
-the older `/teleop/joint_command` interface mentioned in the investigation
-plan. The hand topics remain `/sharpa/{left,right}_hand/joint_command`.
+## 构建
 
-## Preview
-
-The three source directories are linked into `~/ws_fanuc/src`. In a WSL Bash
-terminal:
+在 `/home/msc-crx/ws_fanuc` 下构建；`bimanual_manipulation` 位于工作空间根目录，colcon 从该目录运行即可发现它，不需要移动或创建源码链接。
 
 ```bash
-cd ~/ws_fanuc
+cd /home/msc-crx/ws_fanuc
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select \
   dual_crx_control dual_sharpa_wave bimanual_manipulation
 source install/setup.bash
-ros2 launch bimanual_manipulation bimanual_system.launch.py \
-  crx_mock:=true sharpa_backend:=mock rviz:=true
 ```
 
-RViz reads `/bimanual/robot_description` with `world` as its fixed frame.
-Close the launch with Ctrl+C. In a second, similarly sourced terminal, an
-optional hold-only command source is:
+每个新终端都要 source ROS 和工作空间。Sharpa 真机还需要当前 SDK 的 Python 模块和动态库：
 
 ```bash
-ros2 run bimanual_manipulation hold_and_test
+export PYTHONPATH=/opt/sharpa-wave-sdk/python:${PYTHONPATH}
+export LD_LIBRARY_PATH=/opt/sharpa-wave-sdk/lib:${LD_LIBRARY_PATH}
 ```
 
-Only start one command source for the arm and hand command topics. The hold
-node waits for fresh feedback from each arm and hand, then publishes their
-measured positions at 100 Hz. It latches a fault and stops publishing if
-feedback or a command subscriber disappears. Stopping publication is not an
-emergency stop; the existing controllers may retain their last target.
+## 统一启动
 
-## Edit the model
+真机只读启动，显示组合模型与传感器窗口：
 
-[`config/hand_mounts.yaml`](config/hand_mounts.yaml) contains the fixed
-`left_ee_mount` → `left_hand_flange` and `right_ee_mount` →
-`right_hand_flange` transforms. Its current zeros are **mock preview
-placeholders**. Edit the `xyz` values in metres and `rpy` values in radians,
-then restart the launch. You can pass another file with
-`hand_mounts:=/absolute/path/to/hand_mounts.yaml`.
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  crx_mock:=false sharpa_backend:=sharpa_sdk read_only:=true \
+  rviz:=true viewer:=true
+```
 
-The composite URDF is built at launch from the installed CRX xacro and the
-two installed Sharpa URDFs. It has 56 movable joints. The original CRX
-arm-only TF is isolated under `/crx5ia/arm_only_tf*`; only the composite
-state publisher writes the global `/tf` and `/tf_static` topics.
+`read_only:=true` 将两臂的 FANUC `motion_control` 设为 `0`，只启动 joint-state 和 wrench 广播器，不启动位置控制器或插值节点；双手使用上游 `read_only` 模式，不创建关节指令订阅或设置 SDK 运动控制参数。此模式仍会建立设备连接和状态流。
 
-The mount values and CRX model's existing `left_tcp`/`right_tcp` are not
-calibrated hand/tool frames. This first version is for preview and hold in
-mock mode; it has no small-motion test or grasp planner yet.
+需要后续运行运动脚本时，使用正常控制模式：
+
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  crx_mock:=false sharpa_backend:=sharpa_sdk rviz:=true viewer:=true
+```
+
+正常控制模式会启动底层运动控制器；launch 不自动运行回默认位脚本。两种模式不要同时启动，也不要重复启动已运行的设备驱动。
+
+离线 mock：
+
+```bash
+export ROS_DOMAIN_ID=198
+export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  crx_mock:=true sharpa_backend:=mock rviz:=true viewer:=true
+```
+
+mock 的所有测试终端使用同一个隔离域；真机终端使用设备原有的 ROS 域。现有 mock 手部不产生触觉数据，mock wrench 可能是 NaN；查看器对应显示 `NO DATA` / `INVALID DATA`，不会伪造传感器值。
+
+| 参数 | 默认行为 |
+| --- | --- |
+| `crx_mock` / `sharpa_backend` | `true` / `mock` |
+| `read_only` | `false`；`true` 同时关闭双臂、双手运动控制 |
+| `left_robot_ip` / `right_robot_ip` | 留空，沿用机械臂 launch；当前为 `192.168.2.100` / `192.168.1.100` |
+| `method` / `input_rate_hz` | 留空，沿用机械臂 launch；当前为 `quintic` / `100.0` |
+| `ruckig_target_mode` / `ruckig_target_timeout` | 留空，沿用机械臂 launch |
+| `sharpa_config` | 留空，由手部 backend 选择原包 YAML |
+| `sharpa_publish_rate_hz` | 留空，保留手部 YAML 发布频率 |
+| `sharpa_read_only` | `false`；可单独启用手部只读，全局 `read_only=true` 优先 |
+| `hand_mounts` | 本包 `config/hand_mounts.yaml` |
+| `rviz` / `viewer` | `false` / `false` |
+| `force_max` | 触觉热力图上限 `15`，SDK 单位 |
+| `wrench_force_max` / `wrench_torque_max` | 热度条量程 ±`10` N / ±`5` N·m |
+
+不指定 `method` 时，沿用 `dual_crx_control` 的 `quintic`（五次多项式）插值，默认输入目标频率为 100 Hz、插值输出频率为 500 Hz。双手使用 Sharpa SDK 自带插值，原包硬件配置为 `interpolation: true`。
+
+例如 `method:=linear input_rate_hz:=100` 或 `sharpa_config:=/absolute/path/hands.yaml`。完整参数：
+
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py --show-args
+```
+
+## 回默认位
+
+只预览目标，不创建运动节点或连接 SDK：
+
+```bash
+ros2 run bimanual_manipulation move_to_default_pose.py
+```
+
+在已启动的正常控制模式下，执行“双臂回默认位，再双手回零位”：
+
+```bash
+ros2 run bimanual_manipulation move_to_default_pose.py --execute
+```
+
+它调用两个原包安装的 `move_to_default_pose.py`，保留原有轨迹、反馈检查和限速，第一步失败便停止。机械臂目标来自 `initial_pose.yaml`，双手目标为各 22 个关节零位。可指定 `--arm-rate 100 --hand-rate 100`；机械臂 rate 应与 launch 的 `input_rate_hz` 一致。运动不包含碰撞规划，应先确认路径并停止其他运动指令源。Ctrl+C 会结束当前子进程、停止新目标发送；这不等于硬件急停。
+
+旧的 `hold_and_test` 仍保留为独立的运动命令工具，不由 launch 自动启动，不用于只读检查。
+
+## 统一传感器窗口
+
+在已有驱动运行时单独启动：
+
+```bash
+ros2 run bimanual_manipulation tactile_wrench_viewer.py --force-max 15
+```
+
+上部左右臂各 6 根热度条，显示 `Fx/Fy/Fz/Tx/Ty/Tz`，保留正负号和实际数值；下部左右手各 5 张图，仅显示 `DIST_FORCE` 三维向量的模。十张图共用固定色标，沿用上游查看器算法及 SDK 单位。超出 wrench 量程的条形会饱和，数值后显示 `!`。量程可用 `--wrench-force-max`、`--wrench-torque-max` 设置。
+
+缺失、过期和无效数据显示为 `NO DATA`、`STALE`、`INVALID DATA`；默认一秒无新数据视为过期，可用 `--stale-after` 修改。查看器只订阅 ROS 消息，不连接 SDK，也不发布控制消息。按 q/Esc 或关闭窗口退出。
+
+无桌面时保存一次 PNG 和同名 JSON 状态报告：
+
+```bash
+ros2 run bimanual_manipulation tactile_wrench_viewer.py \
+  --snapshot /tmp/bimanual.png --duration 5 --force-max 15
+```
+
+`--duration` 仅用于截图模式；交互模式持续运行。
+
+### 触觉单位与剪切力
+
+[Sharpa 官方手册 §5.5「6-DOF Force」](https://sharpa-robotics.github.io/sharpa-docs/#5-5-6-dof-force)明确说明，指尖整体合力的单位是 N，整体力矩的单位是 N·m。这一说明针对整个感应表面的六维合力/力矩输出，不能直接套用于热力图的 `DIST_FORCE`。
+
+截至本次查询，公开文档中尚未找到 `DIST_FORCE` 每格三分量的单位与缩放定义。因此触觉色标仍使用 SDK 单位，`--force-max 15` 不表示已确认的 15 N。
+
+当前热力图显示每格三分量的模 `sqrt(x² + y² + z²)`，没有单独显示剪切力。ROS 消息仍保留三个分量；提取局部剪切力需要确认坐标系和对应表面法向。SDK 的指尖六维合力/力矩数据尚未由当前 ROS 驱动发布。
+
+## 配置、命名和模型
+
+没有新增 YAML。实际运行读取安装目录中的原包配置，`--symlink-install` 后可通过包路径核对：
+
+```bash
+ros2 pkg prefix --share dual_crx_control
+ros2 pkg prefix --share dual_sharpa_wave
+```
+
+| 来源 | 用途 |
+| --- | --- |
+| `dual_crx_control/config/dual_arm_controllers.yaml` | 控制器与 wrench 广播器 |
+| `dual_crx_control/config/initial_pose.yaml` | 默认位与 mock 初始位 |
+| `dual_sharpa_wave/config/dual_sharpa_hardware.yaml` | 真机序列号、SDK 参数、触觉与发布频率 |
+| `dual_sharpa_wave/config/dual_sharpa_wave.yaml` | mock 参数 |
+| 本包 `config/hand_mounts.yaml` | 两侧机械臂到手部法兰的固定变换 |
+
+手部源码目录为 `src/dual_sharpa_wave_ros2`，ROS 包名为 `dual_sharpa_wave`。机械臂关节是 `left_J1..J6` / `right_J1..J6`；手部关节直接沿用原包 `joint_names(side)`，不额外添加 namespace 前缀。
+
+- 机械臂反馈：`/crx5ia/{left,right}/joint_states`。
+- wrench：`/crx5ia/{left,right}/force_torque_sensor_broadcaster/wrench`。
+- 手部反馈：`/sharpa/{left,right}_hand/joint_states`。
+- 触觉：`/sharpa/{left,right}_hand/tactile/{pinky,ring,middle,index,thumb}/dist_force`。
+- 组合反馈与模型：`/bimanual/joint_states`、`/bimanual/robot_description`。
+
+组合模型从两个原包的当前 URDF/Xacro 生成。CRX 原模型的 TF 被隔离，只有组合模型发布全局 `/tf` 与 `/tf_static`。RViz 固定坐标系为 `world`。
+
+`hand_mounts.yaml` 当前是零变换占位：`left_ee_mount → left_hand_flange` 和右侧对应连接。准确的安装姿态需要填入实测 xyz（米）和 rpy（弧度），再重启 launch；当前模型不能代表已标定的手部安装或碰撞几何。
+
+## 验证
+
+离线测试不启动设备：
+
+```bash
+python3 -m pytest -q bimanual_manipulation/test/test_integration.py
+```
+
+本次构建、mock 回默认位、TF、界面和真机只读结果见 [docs/validation.md](docs/validation.md)。

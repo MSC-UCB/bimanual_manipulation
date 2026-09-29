@@ -1,57 +1,80 @@
-"""Bring up both existing control stacks and one composite preview model."""
+"""Combine the current arm/hand stacks, preserving their configuration defaults."""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument, GroupAction, IncludeLaunchDescription,
+    OpaqueFunction, UnsetLaunchConfiguration,
+)
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import SetRemap
+from launch_ros.actions import Node, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
+ARM_OVERRIDES = ('left_robot_ip', 'right_robot_ip', 'method', 'input_rate_hz',
+                 'ruckig_target_mode', 'ruckig_target_timeout')
 
-def _source(package, file):
-    return PythonLaunchDescriptionSource(
+
+def _include(package, file, arguments):
+    source = PythonLaunchDescriptionSource(
         PathJoinSubstitution([FindPackageShare(package), 'launch', file]))
+    return IncludeLaunchDescription(source, launch_arguments=arguments.items())
+
+
+def _system(context):
+    def value(name):
+        return LaunchConfiguration(name).perform(context)
+
+    crx_args = {'mock': value('crx_mock'), 'rviz': 'false', 'read_only': value('read_only')}
+    crx_args.update({name: value(name) for name in ARM_OVERRIDES if value(name)})
+    # Includes inherit launch configurations. Unset blank overrides within the
+    # arm group so upstream DeclareLaunchArgument can supply its own defaults.
+    unset = [UnsetLaunchConfiguration(name) for name in ARM_OVERRIDES if not value(name)]
+    hand_args = {
+        'backend': value('sharpa_backend'), 'use_rviz': 'false',
+        'config_file': value('sharpa_config'),
+        'publish_rate_hz': value('sharpa_publish_rate_hz'),
+        'read_only': 'true' if value('read_only') == 'true' else value('sharpa_read_only'),
+    }
+    return [
+        GroupAction([
+            *unset,
+            SetRemap(src='/tf', dst='/crx5ia/arm_only_tf'),
+            SetRemap(src='/tf_static', dst='/crx5ia/arm_only_tf_static'),
+            _include('dual_crx_control', 'dual_arm.launch.py', crx_args),
+        ]),
+        GroupAction([_include('dual_sharpa_wave', 'dual_sharpa.launch.py', hand_args)]),
+        GroupAction([_include('bimanual_manipulation', 'bimanual_description.launch.py', {
+            'hand_mounts': value('hand_mounts'), 'rviz': value('rviz'),
+        })]),
+        Node(package='bimanual_manipulation', executable='tactile_wrench_viewer.py',
+             name='tactile_wrench_viewer', output='screen',
+             arguments=['--force-max', value('force_max'),
+                        '--wrench-force-max', value('wrench_force_max'),
+                        '--wrench-torque-max', value('wrench_torque_max')],
+             condition=IfCondition(LaunchConfiguration('viewer'))),
+    ]
 
 
 def generate_launch_description():
-    crx = IncludeLaunchDescription(
-        _source('dual_crx_control', 'dual_arm.launch.py'),
-        launch_arguments={
-            'mock': LaunchConfiguration('crx_mock'),
-            'rviz': 'false',
-            'method': 'linear',
-            'input_rate_hz': '100.0',
-            'left_robot_ip': LaunchConfiguration('left_robot_ip'),
-            'right_robot_ip': LaunchConfiguration('right_robot_ip'),
-        }.items(),
-    )
-    return LaunchDescription([
+    arguments = [
         DeclareLaunchArgument('crx_mock', default_value='true', choices=['true', 'false']),
-        DeclareLaunchArgument('sharpa_backend', default_value='mock',
-                              choices=['mock', 'sharpa_sdk']),
-        DeclareLaunchArgument('left_robot_ip', default_value='192.168.10.100'),
-        DeclareLaunchArgument('right_robot_ip', default_value='192.168.10.200'),
+        DeclareLaunchArgument('read_only', default_value='false', choices=['true', 'false'],
+                              description='Read both arms and hands without motion control'),
+        DeclareLaunchArgument('sharpa_backend', default_value='mock', choices=['mock', 'sharpa_sdk']),
+        DeclareLaunchArgument('sharpa_config', default_value='',
+                              description='Hand YAML path; blank selects upstream backend config'),
+        DeclareLaunchArgument('sharpa_publish_rate_hz', default_value='',
+                              description='Blank preserves the hand YAML rate'),
+        DeclareLaunchArgument('sharpa_read_only', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('hand_mounts', default_value=''),
         DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
-        # The CRX launch also starts its own arm-only state publisher. Scope its
-        # TF away from /tf so only the composite model publishes these frames.
-        GroupAction([
-            SetRemap(src='/tf', dst='/crx5ia/arm_only_tf'),
-            SetRemap(src='/tf_static', dst='/crx5ia/arm_only_tf_static'),
-            crx,
-        ]),
-        IncludeLaunchDescription(
-            _source('dual_sharpa_wave', 'dual_sharpa.launch.py'),
-            launch_arguments={
-                'backend': LaunchConfiguration('sharpa_backend'),
-                'use_rviz': 'false',
-            }.items(),
-        ),
-        IncludeLaunchDescription(
-            _source('bimanual_manipulation', 'bimanual_description.launch.py'),
-            launch_arguments={
-                'hand_mounts': LaunchConfiguration('hand_mounts'),
-                'rviz': LaunchConfiguration('rviz'),
-            }.items(),
-        ),
-    ])
+        DeclareLaunchArgument('viewer', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('force_max', default_value='15', description='Tactile magnitude, SDK units'),
+        DeclareLaunchArgument('wrench_force_max', default_value='10', description='Wrench force +/- N'),
+        DeclareLaunchArgument('wrench_torque_max', default_value='5', description='Wrench torque +/- N m'),
+    ]
+    for name in ARM_OVERRIDES:
+        arguments.append(DeclareLaunchArgument(
+            name, default_value='', description='Blank uses dual_crx_control launch default'))
+    return LaunchDescription([*arguments, OpaqueFunction(function=_system)])

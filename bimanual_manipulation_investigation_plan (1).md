@@ -1,5 +1,7 @@
 # bimanual_manipulation：程式調查與最小整合計畫
 
+> **历史文档：** 以下是早期调查记录，包含已停用的接口。当前实现、默认 `quintic` 插值、真机只读启动和统一传感器窗口请看 [中文使用说明](README.md)；本次需求与实施方案见 [实施方案](docs/implementation_plan.md)，测试结果见 [验证记录](docs/validation.md)。
+
 > **本地實作更新（2026-09-24）：** 已建立 ROS package；目前的編譯、mock 預覽與 hold 操作請看 [README.md](README.md)。本地 `dual_crx_control` checkout 為 `5f30342`，已移除本計畫下文使用的 `dual_arm_teleop.launch.py`、`/teleop/*` 與 `teleop_bridge`；實作改用 `dual_arm.launch.py`、`/crx5ia/joint_targets`（`JointState`）及左右獨立回饋。合併 URDF/RViz 已完成，安裝位姿仍為 mock 暫定值；可選的小幅動作尚未實作。以下保留原始調查記錄，舊介面範例不可直接照做。
 
 調查日期：2026-09-23；整機 description 與總 launch 設計更新：2026-09-24（美西時間）。目標是**先以最少改動接通雙 CRX 與雙 Sharpa Wave**；本文件是交給 Codex 實作的規格，尚未建立或執行新的 ROS package。以下依兩個 repository 的 `main` 分支檢查，CRX tree `34a8ca3`、Sharpa tree `4bc82a6`；實機啟動前應比對本機 checkout。

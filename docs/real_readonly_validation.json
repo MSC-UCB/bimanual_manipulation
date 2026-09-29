@@ -1,0 +1,184 @@
+{
+  "mode": "real hardware, read_only=true",
+  "sensor_status": {
+    "left/wrench": "LIVE",
+    "left/pinky": "LIVE",
+    "left/ring": "LIVE",
+    "left/middle": "LIVE",
+    "left/index": "LIVE",
+    "left/thumb": "LIVE",
+    "right/wrench": "LIVE",
+    "right/pinky": "LIVE",
+    "right/ring": "LIVE",
+    "right/middle": "LIVE",
+    "right/index": "LIVE",
+    "right/thumb": "LIVE"
+  },
+  "joint_streams": {
+    "right/arm": {
+      "count": 14601,
+      "joints": 6,
+      "hz": 499.8
+    },
+    "left/arm": {
+      "count": 14427,
+      "joints": 6,
+      "hz": 499.8
+    },
+    "left/hand": {
+      "count": 2810,
+      "joints": 22,
+      "hz": 100.0
+    },
+    "right/hand": {
+      "count": 2796,
+      "joints": 22,
+      "hz": 100.0
+    },
+    "combined": {
+      "count": 2637,
+      "joints": 56,
+      "hz": 100.0
+    }
+  },
+  "controllers": {
+    "left": {
+      "force_torque_sensor_broadcaster": "active",
+      "joint_state_broadcaster": "active"
+    },
+    "right": {
+      "force_torque_sensor_broadcaster": "active",
+      "joint_state_broadcaster": "active"
+    }
+  },
+  "motion_endpoints": {
+    "/crx5ia/joint_targets": {
+      "publishers": 0,
+      "subscribers": 0
+    },
+    "/crx5ia/interpolated_joint_commands": {
+      "publishers": 0,
+      "subscribers": 0
+    },
+    "/sharpa/left_hand/joint_command": {
+      "publishers": 0,
+      "subscribers": 0
+    },
+    "/sharpa/right_hand/joint_command": {
+      "publishers": 0,
+      "subscribers": 0
+    },
+    "/crx5ia/left/forward_position_controller/commands": {
+      "publishers": 0,
+      "subscribers": 0
+    },
+    "/crx5ia/right/forward_position_controller/commands": {
+      "publishers": 0,
+      "subscribers": 0
+    }
+  },
+  "driver_descriptions_received": [
+    "right",
+    "left"
+  ],
+  "tactile": {
+    "left/index": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 27.7
+    },
+    "left/pinky": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 27.7
+    },
+    "left/middle": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 28.3
+    },
+    "left/thumb": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 28.3
+    },
+    "left/ring": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 27.7
+    },
+    "right/middle": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 29.0
+    },
+    "right/pinky": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 28.3
+    },
+    "right/ring": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 27.3
+    },
+    "right/thumb": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 28.3
+    },
+    "right/index": {
+      "shape": [
+        60,
+        60,
+        3
+      ],
+      "hz": 28.8
+    }
+  },
+  "wrench": {
+    "right": [
+      -0.05423937365412712,
+      -0.06308853626251221,
+      -0.038008805364370346,
+      -0.0049797422252595425,
+      -0.010732422582805157,
+      0.005890847183763981
+    ],
+    "left": [
+      0.2222871333360672,
+      -0.2230868637561798,
+      -0.06972089409828186,
+      -0.02166926860809326,
+      -0.05488978326320648,
+      -0.005691521801054478
+    ]
+  }
+}

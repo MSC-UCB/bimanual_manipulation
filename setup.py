@@ -22,6 +22,8 @@ setup(
     entry_points={
         'console_scripts': [
             'hold_and_test = bimanual_manipulation.hold_and_test:main',
+            'move_to_default_pose.py = bimanual_manipulation.move_to_default_pose:main',
+            'tactile_wrench_viewer.py = bimanual_manipulation.tactile_wrench_viewer:main',
         ],
     },
 )

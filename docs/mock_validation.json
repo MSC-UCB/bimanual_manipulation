@@ -1,0 +1,19 @@
+{
+  "combined_joint_count": 56,
+  "mock_perturbation_and_reset": "passed",
+  "global_tf_publishers": 1,
+  "sensors": {
+    "left/wrench": "INVALID DATA",
+    "left/pinky": "NO DATA",
+    "left/ring": "NO DATA",
+    "left/middle": "NO DATA",
+    "left/index": "NO DATA",
+    "left/thumb": "NO DATA",
+    "right/wrench": "INVALID DATA",
+    "right/pinky": "NO DATA",
+    "right/ring": "NO DATA",
+    "right/middle": "NO DATA",
+    "right/index": "NO DATA",
+    "right/thumb": "NO DATA"
+  }
+}
