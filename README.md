@@ -4,7 +4,7 @@
 
 ## 构建
 
-在 `/home/msc-crx/ws_fanuc` 下构建；`bimanual_manipulation` 位于工作空间根目录，colcon 从该目录运行即可发现它，不需要移动或创建源码链接。
+在 `/home/msc-crx/ws_fanuc` 下构建；`bimanual_manipulation` 源码位于 `src/bimanual_manipulation`，colcon 从工作空间根目录运行即可发现它。
 
 ```bash
 cd /home/msc-crx/ws_fanuc
@@ -179,7 +179,7 @@ ros2 pkg prefix --share dual_sharpa_wave
 离线测试不启动设备：
 
 ```bash
-python3 -m pytest -q bimanual_manipulation/test/test_integration.py
+python3 -m pytest -q src/bimanual_manipulation/test/test_integration.py
 ```
 
 本次构建、mock 回默认位、TF、界面和真机只读结果见 [docs/validation.md](docs/validation.md)。

@@ -1,6 +1,6 @@
 # 双臂双手集成：需求与实施方案
 
-目标：让 `/home/msc-crx/ws_fanuc/bimanual_manipulation` 能用于真实机器人。
+目标：让 `/home/msc-crx/ws_fanuc/src/bimanual_manipulation` 能用于真实机器人。
 
 ## 原始需求
 

@@ -8,7 +8,7 @@
 colcon build --symlink-install --packages-select \
   dual_crx_control dual_sharpa_wave bimanual_manipulation --cmake-args -DBUILD_TESTING=OFF
 python3 -m pytest -q \
-  bimanual_manipulation/test/test_integration.py \
+  src/bimanual_manipulation/test/test_integration.py \
   src/dual_crx_control/tools/test_move_to_default_pose.py \
   src/dual_crx_control/tools/test_initial_pose.py \
   src/dual_sharpa_wave_ros2/test/test_default_pose.py \
