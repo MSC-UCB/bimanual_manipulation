@@ -10,7 +10,7 @@
 cd /home/msc-crx/ws_fanuc
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select \
-  dual_crx_control dual_sharpa_wave bimanual_manipulation
+  sharpa_control_interfaces dual_crx_control dual_sharpa_wave bimanual_manipulation
 source install/setup.bash
 ```
 
@@ -61,7 +61,7 @@ mock 的所有测试终端使用同一个隔离域；真机终端使用设备原
 | `method` / `input_rate_hz` | 留空，沿用机械臂 launch；当前为 `quintic` / `100.0` |
 | `ruckig_target_mode` / `ruckig_target_timeout` | 留空，沿用机械臂 launch |
 | `collision_force_limit` / `collision_force_threshold_n` | 留空，沿用机械臂 launch；默认开启、`20.0` N |
-| `sharpa_config` | 留空，由手部 backend 选择原包 YAML |
+| `sharpa_config` | 留空，真机默认 MIT YAML；mock 使用 mock YAML |
 | `sharpa_publish_rate_hz` | 留空，保留手部 YAML 发布频率 |
 | `sharpa_read_only` | `false`；可单独启用手部只读，全局 `read_only=true` 优先 |
 | `hand_mounts` | 本包 `config/hand_mounts.yaml` |
@@ -69,13 +69,46 @@ mock 的所有测试终端使用同一个隔离域；真机终端使用设备原
 | `force_max` | 触觉热力图上限 `15`，SDK 单位 |
 | `wrench_force_max` / `wrench_torque_max` | 热度条量程 ±`10` N / ±`5` N·m |
 
-不指定 `method` 时，沿用 `dual_crx_control` 的 `quintic`（五次多项式）插值，默认输入目标频率为 100 Hz、插值输出频率为 500 Hz。双手使用 Sharpa SDK 自带插值，原包硬件配置为 `interpolation: true`。
+不指定 `method` 时，沿用 `dual_crx_control` 的 `quintic`（五次多项式）插值，默认输入目标频率为 100 Hz、插值输出频率为 500 Hz。双手真机默认 MIT，SDK 位置插值关闭（`interpolation: false`）；CRX 手臂仍使用原位置控制流程。
 
 例如 `method:=linear input_rate_hz:=100` 或 `sharpa_config:=/absolute/path/hands.yaml`。完整参数：
 
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py --show-args
 ```
+
+### Sharpa 双手使用 MIT 控制
+
+统一 launch 的真机双手已默认使用 MIT，无需额外指定配置：
+
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  crx_mock:=false sharpa_backend:=sharpa_sdk \
+  read_only:=false sharpa_read_only:=false \
+  rviz:=true viewer:=true
+```
+
+启动前退出原有双手／双臂 driver，并退出 Pilot 对同一设备的控制，避免重复连接。
+这会启动真实双臂控制与双手 MIT 控制；MIT 设置仅作用于 Sharpa，CRX 仍使用原位置控制流程。
+MIT 启动会设置模式并使能手部马达，读取 Pilot 保存的 Kp／Kd，不覆写增益。
+两侧日志应出现 `control_mode=mit, read_only=False`。
+
+自订配置仍可通过 `sharpa_config` 指定。如需原 POSITION 模式，指定
+`sharpa_config:=/home/msc-crx/ws_fanuc/src/dual_sharpa_wave_ros2/config/dual_sharpa_hardware.yaml`。
+
+MIT YAML 为两手配置 `interpolation:false`、100 Hz 状态发布和 0.5 秒命令闲置判定。
+原 retargeting 的手部 ROS 命令接口不变，20 Hz 求解、100 Hz 发布、50 ms 上游插值仍可使用。
+状态发布频率并不自动产生运动命令。有效命令中断超过 0.5 秒后，保留手部 session 与回授；
+恢复命令时从最新回授重新接管，沿用首笔目标距回授不超过 0.1 rad 的检查。
+正常结束归零脚本或切换 teleop 不再要求重启 driver。停止发布不等于停用马达，最后的 MIT
+目标仍可能持续作用；真正的 SDK 故障仍会关闭并锁定 session。
+细节见 [MIT 说明](../dual_sharpa_wave_ros2/docs/mit_control.md)。
+
+MIT 现在将命令目标裁切到 URDF 上下限；实际回授超出上下限加 0.5° 时，锁定普通命令，
+保留连线与回授，不自动归零。原 `move_to_default_pose.py --execute` 指令会通过专用 action
+请求双手归零恢复，成功后解除锁定，无需重启 driver。取消／到位失败保留锁定，可再次
+请求归零；恢复中持续加重的超限或 SDK 故障才关闭 SDK。新增的
+`sharpa_control_interfaces` 包需一起构建并重新 source，已运行的 driver 需重启一次加载新版。
 
 ## 双臂碰撞力限制
 
@@ -158,7 +191,8 @@ ros2 pkg prefix --share dual_sharpa_wave
 | --- | --- |
 | `dual_crx_control/config/dual_arm_controllers.yaml` | 控制器与 wrench 广播器 |
 | `dual_crx_control/config/initial_pose.yaml` | 默认位与 mock 初始位 |
-| `dual_sharpa_wave/config/dual_sharpa_hardware.yaml` | 真机序列号、SDK 参数、触觉与发布频率 |
+| `dual_sharpa_wave/config/dual_sharpa_mit.yaml` | 默认真机 MIT 配置、序列号、触觉与恢复参数 |
+| `dual_sharpa_wave/config/dual_sharpa_hardware.yaml` | 明确选择原 POSITION 模式的真机配置 |
 | `dual_sharpa_wave/config/dual_sharpa_wave.yaml` | mock 参数 |
 | 本包 `config/hand_mounts.yaml` | 两侧机械臂到手部法兰的固定变换 |
 
