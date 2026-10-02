@@ -20,7 +20,7 @@ Source ROS and the workspace in every new terminal. Sharpa hardware also require
 export PYTHONPATH=/opt/sharpa-wave-sdk/python:${PYTHONPATH}
 export LD_LIBRARY_PATH=/opt/sharpa-wave-sdk/lib:${LD_LIBRARY_PATH}
 ```
-
+You can add this to bash.rc for covenience.
 ## Unified Launch
 
 The validated hardware configuration is the default:
