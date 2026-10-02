@@ -35,6 +35,8 @@ def _system(context):
         'backend': value('sharpa_backend'), 'use_rviz': 'false',
         'config_file': value('sharpa_config'),
         'publish_rate_hz': value('sharpa_publish_rate_hz'),
+        'mit_kp_ratio': LaunchConfiguration('mit_kp_ratio', default='').perform(context),
+        'mit_kd_ratio': LaunchConfiguration('mit_kd_ratio', default='').perform(context),
         'read_only': 'true' if value('read_only') == 'true' else value('sharpa_read_only'),
     }
     return [
@@ -59,23 +61,28 @@ def _system(context):
 
 def generate_launch_description():
     arguments = [
-        DeclareLaunchArgument('crx_mock', default_value='true', choices=['true', 'false']),
+        DeclareLaunchArgument('crx_mock', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('read_only', default_value='false', choices=['true', 'false'],
                               description='Read both arms and hands without motion control'),
-        DeclareLaunchArgument('sharpa_backend', default_value='mock', choices=['mock', 'sharpa_sdk']),
+        DeclareLaunchArgument('sharpa_backend', default_value='sharpa_sdk', choices=['mock', 'sharpa_sdk']),
         DeclareLaunchArgument('sharpa_config', default_value='',
                               description='Hand YAML path; blank selects upstream backend config'),
         DeclareLaunchArgument('sharpa_publish_rate_hz', default_value='',
                               description='Blank preserves the hand YAML rate'),
+        DeclareLaunchArgument('mit_kp_ratio', default_value='0.6',
+                              description='Startup Kp multiplier for both hands; blank uses YAML'),
+        DeclareLaunchArgument('mit_kd_ratio', default_value='0.8',
+                              description='Startup Kd multiplier for both hands; blank uses YAML'),
         DeclareLaunchArgument('sharpa_read_only', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('hand_mounts', default_value=''),
         DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
-        DeclareLaunchArgument('viewer', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('viewer', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('force_max', default_value='15', description='Tactile magnitude, SDK units'),
-        DeclareLaunchArgument('wrench_force_max', default_value='10', description='Wrench force +/- N'),
-        DeclareLaunchArgument('wrench_torque_max', default_value='5', description='Wrench torque +/- N m'),
+        DeclareLaunchArgument('wrench_force_max', default_value='20', description='Wrench force +/- N'),
+        DeclareLaunchArgument('wrench_torque_max', default_value='3', description='Wrench torque +/- N m'),
     ]
     for name in ARM_OVERRIDES:
         arguments.append(DeclareLaunchArgument(
-            name, default_value='', description='Blank uses dual_crx_control launch default'))
+            name, default_value='50.0' if name == 'collision_force_threshold_n' else '',
+            description='Blank uses dual_crx_control launch default'))
     return LaunchDescription([*arguments, OpaqueFunction(function=_system)])

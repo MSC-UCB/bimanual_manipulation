@@ -23,6 +23,16 @@ export LD_LIBRARY_PATH=/opt/sharpa-wave-sdk/lib:${LD_LIBRARY_PATH}
 
 ## 统一启动
 
+已验证的真机配置为默认值，直接启动即可：
+
+```bash
+ros2 launch bimanual_manipulation bimanual_system.launch.py
+```
+
+等同于 `crx_mock:=false sharpa_backend:=sharpa_sdk mit_kp_ratio:=0.6 mit_kd_ratio:=0.8 collision_force_threshold_n:=50.0 viewer:=true wrench_force_max:=20 wrench_torque_max:=3`。
+`wrench_force_max` 和 `wrench_torque_max` 只调整查看器量程；CRX 停止门槛由 `collision_force_threshold_n` 控制。
+显式传入参数仍可覆盖默认值；MIT 倍率留空时才使用手部 YAML 的值。
+
 真机只读启动，显示组合模型与传感器窗口：
 
 ```bash
@@ -55,19 +65,20 @@ mock 的所有测试终端使用同一个隔离域；真机终端使用设备原
 
 | 参数 | 默认行为 |
 | --- | --- |
-| `crx_mock` / `sharpa_backend` | `true` / `mock` |
+| `crx_mock` / `sharpa_backend` | `false` / `sharpa_sdk` |
 | `read_only` | `false`；`true` 同时关闭双臂、双手运动控制 |
 | `left_robot_ip` / `right_robot_ip` | 留空，沿用机械臂 launch；当前为 `192.168.2.100` / `192.168.1.100` |
 | `method` / `input_rate_hz` | 留空，沿用机械臂 launch；当前为 `quintic` / `100.0` |
 | `ruckig_target_mode` / `ruckig_target_timeout` | 留空，沿用机械臂 launch |
-| `collision_force_limit` / `collision_force_threshold_n` | 留空，沿用机械臂 launch；默认开启、`20.0` N |
+| `collision_force_limit` / `collision_force_threshold_n` | 默认开启 / `50.0` N |
 | `sharpa_config` | 留空，真机默认 MIT YAML；mock 使用 mock YAML |
+| `mit_kp_ratio` / `mit_kd_ratio` | `0.6` / `0.8`，左右手相同 |
 | `sharpa_publish_rate_hz` | 留空，保留手部 YAML 发布频率 |
 | `sharpa_read_only` | `false`；可单独启用手部只读，全局 `read_only=true` 优先 |
 | `hand_mounts` | 本包 `config/hand_mounts.yaml` |
-| `rviz` / `viewer` | `false` / `false` |
+| `rviz` / `viewer` | `false` / `true` |
 | `force_max` | 触觉热力图上限 `15`，SDK 单位 |
-| `wrench_force_max` / `wrench_torque_max` | 热度条量程 ±`10` N / ±`5` N·m |
+| `wrench_force_max` / `wrench_torque_max` | 热度条量程 ±`20` N / ±`3` N·m |
 
 不指定 `method` 时，沿用 `dual_crx_control` 的 `quintic`（五次多项式）插值，默认输入目标频率为 100 Hz、插值输出频率为 500 Hz。双手真机默认 MIT，SDK 位置插值关闭（`interpolation: false`）；CRX 手臂仍使用原位置控制流程。
 
@@ -90,7 +101,8 @@ ros2 launch bimanual_manipulation bimanual_system.launch.py \
 
 启动前退出原有双手／双臂 driver，并退出 Pilot 对同一设备的控制，避免重复连接。
 这会启动真实双臂控制与双手 MIT 控制；MIT 设置仅作用于 Sharpa，CRX 仍使用原位置控制流程。
-MIT 启动会设置模式并使能手部马达，读取 Pilot 保存的 Kp／Kd，不覆写增益。
+MIT 启动先按固定调参基准 × `mit_kp_ratio`／`mit_kd_ratio`（本 launch 默认 0.6／0.8）一次写入 Kp／Kd 并读回确认；已相同则跳过。随后设置模式并使能手部马达。
+可加 `mit_kp_ratio:=0.6 mit_kd_ratio:=0.8` 分别调整 Kp／Kd 启动倍率，左右手使用相同的一组值，重启不会累乘。GUI ratio=1 始终对应相同的原始调参基准。
 两侧日志应出现 `control_mode=mit, read_only=False`。
 
 自订配置仍可通过 `sharpa_config` 指定。如需原 POSITION 模式，指定
@@ -117,7 +129,7 @@ MIT 现在将命令目标裁切到 URDF 上下限；实际回授超出上下限�
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py \
   crx_mock:=false sharpa_backend:=sharpa_sdk \
-  collision_force_limit:=true collision_force_threshold_n:=20.0
+  collision_force_limit:=true collision_force_threshold_n:=50.0
 ```
 
 任一 CRX 手臂的 `|Fx|`、`|Fy|` 或 `|Fz|` 超过门槛，会停止两臂并关闭 Stream Motion。
