@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import pytest
 from geometry_msgs.msg import WrenchStamped
+from std_msgs.msg import Float64MultiArray
 from builtin_interfaces.msg import Time
 
 from bimanual_manipulation import move_to_default_pose as move
@@ -87,6 +88,7 @@ def populated():
         array[:, :, 0] = np.linspace(0, 15, 60)[None, :]
         for finger in FINGERS:
             data.tactile.receive((side, finger, 'DIST_FORCE'), to_image(array, Time(sec=10)), 10.)
+            data.receive_f6(side, finger, Float64MultiArray(data=[-3., 4., 0., 99., 99., 99.]), 10.)
     return data
 
 
@@ -121,6 +123,24 @@ def test_missing_and_invalid_data():
     assert data.status(1., 1.)['left/wrench'] == 'INVALID DATA'
     assert data.status(1., 1.)['left/thumb'] == 'INVALID DATA'
     render(data, now=1.)
+
+
+def test_resultant_magnitude_and_independent_freshness():
+    data = populated()
+    assert data.resultants['left', 'thumb'][0] == 5.
+    data.receive_f6('left', 'thumb', Float64MultiArray(data=[0.] * 6), 12.)
+    assert data.resultants['left', 'thumb'][0] == 0.
+    status = data.status(12., 1.)
+    assert status['left/thumb/resultant'] == 'LIVE'
+    assert status['left/thumb'] == 'STALE'
+    for bad in ([1.] * 5, [float('nan')] * 6, [float('inf')] * 6):
+        data.receive_f6('left', 'thumb', Float64MultiArray(data=bad), 12.)
+        assert data.status(12., 1.)['left/thumb/resultant'] == 'INVALID DATA'
+        render(data, now=12.)
+    data.receive_f6('left', 'thumb', Float64MultiArray(data=[30., 40., 0., 0., 0., 0.]), 13.)
+    assert data.resultants['left', 'thumb'][0] == 50.
+    assert data.status(13., 1.)['left/thumb/resultant'] == 'LIVE'
+    render(data, now=13., resultant_force_max=5.)
 
 
 def test_readonly_driver_description():

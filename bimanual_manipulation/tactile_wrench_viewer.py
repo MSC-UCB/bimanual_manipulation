@@ -1,4 +1,4 @@
-"""ROS subscriptions only: 12 signed wrench bars and 10 tactile force heatmaps."""
+"""ROS subscriptions only: wrench bars, tactile heatmaps and F6 magnitude bars."""
 
 import argparse
 import json
@@ -11,7 +11,7 @@ import time
 import cv2
 import numpy as np
 
-from dual_sharpa_wave.tactile import FINGERS
+from dual_sharpa_wave.tactile import FINGERS, f6_array
 from dual_sharpa_wave.tactile_viewer import DisplayData, force_heatmap, text
 
 SIDES = ('left', 'right')
@@ -19,6 +19,7 @@ LABELS = ('Fx', 'Fy', 'Fz', 'Tx', 'Ty', 'Tz')
 WINDOW = 'Bimanual | wrench and tactile'
 WIDTH, HEIGHT = 1400, 870
 TILE_W, TILE_H = 264, 180
+HEAT_W = 180
 BG, PANEL = (24, 26, 30), (37, 40, 45)
 
 
@@ -27,6 +28,22 @@ class SensorData:
         self.tactile = DisplayData()
         self.wrenches = {}
         self.errors = {}
+        self.resultants = {}
+        self.resultant_errors = set()
+
+    def receive_f6(self, side, finger, message, now):
+        key = (side, finger)
+        try:
+            # Provisional SDK convention: first three F6 components are force.
+            # Keep SDK units until the vendor's physical definition is confirmed.
+            value = math.hypot(*f6_array(message.data)[:3])
+            if not math.isfinite(value):
+                raise ValueError('nonfinite resultant')
+        except (ValueError, TypeError):
+            self.resultant_errors.add(key)
+            return
+        self.resultants[key] = (value, now)
+        self.resultant_errors.discard(key)
 
     def receive_wrench(self, side, message, now):
         wrench = message.wrench
@@ -47,6 +64,11 @@ class SensorData:
                 'NO DATA' if sample is None else
                 'STALE' if now - sample[1] > stale_after else 'LIVE')
             for finger in FINGERS:
+                resultant = self.resultants.get((side, finger))
+                result[f'{side}/{finger}/resultant'] = (
+                    'INVALID DATA' if (side, finger) in self.resultant_errors else
+                    'NO DATA' if resultant is None else
+                    'STALE' if now - resultant[1] > stale_after else 'LIVE')
                 key = (side, finger, 'DIST_FORCE')
                 sample = self.tactile.samples.get(key)
                 result[f'{side}/{finger}'] = (
@@ -60,7 +82,8 @@ def bar_extent(value, maximum, half_width):
     return round(np.clip(value / maximum, -1., 1.) * half_width)
 
 
-def render(data, *, now, force_max=15., wrench_force_max=10., wrench_torque_max=5., stale_after=1.):
+def render(data, *, now, force_max=15., resultant_force_max=15.,
+           wrench_force_max=10., wrench_torque_max=5., stale_after=1.):
     canvas = np.full((HEIGHT, WIDTH, 3), BG, np.uint8)
     status = data.status(now, stale_after)
     text(canvas, 'BIMANUAL | force / torque and fingertip force magnitude', 20, 27, scale=.65)
@@ -101,20 +124,40 @@ def render(data, *, now, force_max=15., wrench_force_max=10., wrench_torque_max=
             sample = data.tactile.samples.get(key)
             state = status[f'{side}/{finger}']
             text(canvas, finger.upper(), x, top + 38, scale=.45)
-            tile = np.full((TILE_H, TILE_W, 3), PANEL, np.uint8)
+            tile = np.full((TILE_H, HEAT_W, 3), PANEL, np.uint8)
             if sample is not None and state != 'INVALID DATA':
                 picture = force_heatmap(sample.array, force_max)
                 h, w = picture.shape[:2]
-                ratio = min(TILE_W / w, TILE_H / h)
+                ratio = min(HEAT_W / w, TILE_H / h)
                 picture = cv2.resize(picture, (max(1, round(w * ratio)), max(1, round(h * ratio))),
                                      interpolation=cv2.INTER_NEAREST)
                 h, w = picture.shape[:2]
-                tile[(TILE_H-h)//2:(TILE_H-h)//2+h, (TILE_W-w)//2:(TILE_W-w)//2+w] = picture
+                tile[(TILE_H-h)//2:(TILE_H-h)//2+h, (HEAT_W-w)//2:(HEAT_W-w)//2+w] = picture
                 if state == 'STALE':
                     tile //= 4
             if state != 'LIVE':
-                text(tile, state, 30, TILE_H // 2, (70, 150, 240), .6)
-            canvas[y:y+TILE_H, x:x+TILE_W] = tile
+                text(tile, state, 8, TILE_H // 2, (70, 150, 240), .5)
+            canvas[y:y+TILE_H, x:x+HEAT_W] = tile
+            bx = x + HEAT_W + 8
+            force_state = status[f'{side}/{finger}/resultant']
+            resultant = data.resultants.get((side, finger))
+            text(canvas, 'F6 |F|', bx, y + 12, scale=.36)
+            bar_top, bar_bottom = y + 35, y + 139
+            cv2.rectangle(canvas, (bx + 19, bar_top), (bx + 39, bar_bottom), PANEL, -1)
+            text(canvas, f'{resultant_force_max:g}', bx + 18, y + 28, scale=.3)
+            text(canvas, '0', bx + 25, y + 152, scale=.3)
+            if resultant is not None and force_state != 'INVALID DATA':
+                value = resultant[0]
+                extent = round(min(value / resultant_force_max, 1.) * (bar_bottom - bar_top))
+                color = (80, 200, 240) if force_state == 'LIVE' else (40, 65, 70)
+                if extent:
+                    cv2.rectangle(canvas, (bx + 19, bar_bottom - extent + 1),
+                                  (bx + 39, bar_bottom), color, -1)
+                suffix = '!' if value > resultant_force_max else ''
+                text(canvas, f'{value:.3g}{suffix}', bx, y + 166, color, .37)
+            short_state = {'INVALID DATA': 'INVALID', 'NO DATA': 'NO DATA',
+                           'STALE': 'STALE', 'LIVE': 'SDK units'}[force_state]
+            text(canvas, short_state, bx, y + 179, scale=.3)
             age = f'  age {max(0., now - sample.received):.1f}s' if sample is not None else ''
             text(canvas, state + age, x, y + TILE_H + 19, scale=.4)
     ramp = np.tile(np.arange(256, dtype=np.uint8), (12, 1))
@@ -126,12 +169,12 @@ def render(data, *, now, force_max=15., wrench_force_max=10., wrench_torque_max=
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name, default in (('force-max', 15.), ('wrench-force-max', 10.),
+    for name, default in (('force-max', 15.), ('resultant-force-max', 15.), ('wrench-force-max', 10.),
                           ('wrench-torque-max', 5.), ('stale-after', 1.), ('duration', 5.)):
         parser.add_argument('--' + name, type=float, default=default)
     parser.add_argument('--snapshot', type=Path, help='Headless: save PNG and status JSON after --duration seconds')
     args = parser.parse_args(argv)
-    for name in ('force_max', 'wrench_force_max', 'wrench_torque_max', 'stale_after', 'duration'):
+    for name in ('force_max', 'resultant_force_max', 'wrench_force_max', 'wrench_torque_max', 'stale_after', 'duration'):
         value = getattr(args, name)
         if not math.isfinite(value) or value <= 0:
             parser.error(f'{name} must be finite and positive')
@@ -142,12 +185,17 @@ def subscribe(node, data):
     from geometry_msgs.msg import WrenchStamped
     from rclpy.qos import QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import Image
+    from std_msgs.msg import Float64MultiArray
     qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
     for side in SIDES:
         node.create_subscription(
             WrenchStamped, f'/crx5ia/{side}/force_torque_sensor_broadcaster/wrench',
             lambda msg, side=side: data.receive_wrench(side, msg, time.monotonic()), qos)
         for finger in FINGERS:
+            node.create_subscription(
+                Float64MultiArray, f'/sharpa/{side}_hand/tactile/{finger}/f6',
+                lambda msg, side=side, finger=finger: data.receive_f6(
+                    side, finger, msg, time.monotonic()), qos)
             key = (side, finger, 'DIST_FORCE')
             node.create_subscription(
                 Image, f'/sharpa/{side}_hand/tactile/{finger}/dist_force',
@@ -183,6 +231,7 @@ def main(argv=None):
             if args.snapshot is not None and now - began < args.duration:
                 continue
             frame = render(data, now=now, force_max=args.force_max,
+                           resultant_force_max=args.resultant_force_max,
                            wrench_force_max=args.wrench_force_max,
                            wrench_torque_max=args.wrench_torque_max, stale_after=args.stale_after)
             if args.snapshot is not None:

@@ -53,6 +53,7 @@ def _system(context):
         Node(package='bimanual_manipulation', executable='tactile_wrench_viewer.py',
              name='tactile_wrench_viewer', output='screen',
              arguments=['--force-max', value('force_max'),
+                        '--resultant-force-max', value('resultant_force_max'),
                         '--wrench-force-max', value('wrench_force_max'),
                         '--wrench-torque-max', value('wrench_torque_max')],
              condition=IfCondition(LaunchConfiguration('viewer'))),
@@ -78,6 +79,8 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('viewer', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('force_max', default_value='15', description='Tactile magnitude, SDK units'),
+        DeclareLaunchArgument('resultant_force_max', default_value='15',
+                              description='F6 first-three-component magnitude bar, SDK units'),
         DeclareLaunchArgument('wrench_force_max', default_value='20', description='Wrench force +/- N'),
         DeclareLaunchArgument('wrench_torque_max', default_value='3', description='Wrench torque +/- N m'),
     ]

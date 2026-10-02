@@ -116,10 +116,10 @@ MIT YAML 为两手配置 `interpolation:false`、100 Hz 状态发布和 0.5 秒�
 目标仍可能持续作用；真正的 SDK 故障仍会关闭并锁定 session。
 细节见 [MIT 说明](../dual_sharpa_wave_ros2/docs/mit_control.md)。
 
-MIT 现在将命令目标裁切到 URDF 上下限；实际回授超出上下限加 0.5° 时，锁定普通命令，
+MIT 现在将命令目标裁切到 URDF 上下限；实际回授超出上下限加 5° 时，锁定普通命令，
 保留连线与回授，不自动归零。原 `move_to_default_pose.py --execute` 指令会通过专用 action
-请求双手归零恢复，成功后解除锁定，无需重启 driver。取消／到位失败保留锁定，可再次
-请求归零；恢复中持续加重的超限或 SDK 故障才关闭 SDK。新增的
+请求双手归零恢复，成功后解除锁定，无需重启 driver。取消／心跳中断／到位失败只结束恢复；已开始的恢复结束时，实测仍超出边界 5°
+才锁定，否则恢复普通控制。可再次请求归零；恢复中持续加重的超限或 SDK 故障才关闭 SDK。新增的
 `sharpa_control_interfaces` 包需一起构建并重新 source，已运行的 driver 需重启一次加载新版。
 
 ## 双臂碰撞力限制
@@ -135,12 +135,13 @@ ros2 launch bimanual_manipulation bimanual_system.launch.py \
 任一 CRX 手臂的 `|Fx|`、`|Fy|` 或 `|Fz|` 超过门槛，会停止两臂并关闭 Stream Motion。
 双侧驱动与有效力回授就绪后先忽略 3 秒，等 `/crx5ia/collision_force_limiter/state`
 显示 `ARMED` 再开始运动；这段时间不是回默认位动作的豁免，也没有阻挡外部命令的 gate。
-启用后无效力回授或超过 0.2 秒断讯也会触发停止。触发后不自动恢复，先停止外部命令来源、
+力回授缺失、无效或超过 0.2 秒断讯仅警告，不停用双臂；已启用后进入 `DEGRADED`，
+有效侧继续检查力门槛，资料恢复即回到 `ARMED`。有效力值超标触发停止后不自动恢复，先停止外部命令来源、
 解除接触再重启 launch。正常触发只停止 CRX，不停止 Sharpa 手指；limiter 意外退出或
 停止失败则会关闭整个系统 launch。`read_only:=true` 时不启动 limiter。
 
 普通 mock 演示没有有效力回授时，请加 `collision_force_limit:=false`；否则可能因 mock wrench
-为 NaN，一直等待并在 180 秒启动超时后关闭 launch。力限制测试使用独立的合成 wrench。
+为 NaN，一直等待且无法启用力监测，但不会因等待超时关闭 launch。力限制测试使用独立的合成 wrench。
 该功能通过 ROS service 停止，不是硬件急停；实机停止延迟仍需在受控条件下验证。
 
 ## 回默认位
