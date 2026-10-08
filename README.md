@@ -20,7 +20,91 @@ Source ROS and the workspace in every new terminal. Sharpa hardware also require
 export PYTHONPATH=/opt/sharpa-wave-sdk/python:${PYTHONPATH}
 export LD_LIBRARY_PATH=/opt/sharpa-wave-sdk/lib:${LD_LIBRARY_PATH}
 ```
+
 You can add this to bash.rc for covenience.
+
+## Single Arm + Hand Launch
+
+Start one CRX arm and the Sharpa hand on the same side with
+`single_arm_hand.launch.py`. Select `prefix:=left_` or `prefix:=right_`.
+
+```bash
+# Left arm + left hand, software mock
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=left_ crx_mock:=true sharpa_backend:=mock
+
+# Right arm + right hand, with the combined model in RViz
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=right_ crx_mock:=true sharpa_backend:=mock rviz:=true
+
+# Feedback only for the selected arm and hand
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=left_ crx_mock:=true sharpa_backend:=mock read_only:=true
+```
+
+The new launch defaults to `prefix:=left_`, `crx_mock:=true`,
+`sharpa_backend:=mock`, `rviz:=false`, and `viewer:=false`. The existing
+`bimanual_system.launch.py` retains its hardware-first defaults.
+Only the selected arm controller manager and hand driver are started. No motion
+sender or default-pose routine is started automatically.
+
+The combined model and `/bimanual/joint_states` contain 28 movable joints:
+6 arm joints and 22 hand joints. The selected calibrated base transform, TCP
+offset, and hand mount are preserved. The inactive branch is removed from the
+combined model, and the merger subscribes only to the selected arm and hand.
+Arm-stack TF remains isolated; the combined publisher owns global model TF.
+The underlying CRX description topic may still contain its original dual-arm
+model. The current hand mount defaults are placeholders, not a measured mounting
+calibration or a new fingertip TCP definition.
+
+The launch forwards the existing arm IP, interpolation, force-limit, Sharpa YAML,
+publication-rate, gain, and hand-mount arguments. The collision-force threshold
+defaults to 50 N, and MIT startup gain ratios default to Kp=0.6 and Kd=0.8.
+Global `read_only:=true` overrides `sharpa_read_only` and disables motion control
+for both selected devices. Otherwise, `sharpa_read_only:=true` makes only the hand
+read-only. A custom `sharpa_config` or `hand_mounts` YAML may contain only the
+selected side. List all arguments with:
+
+```bash
+ros2 launch bimanual_manipulation single_arm_hand.launch.py --show-args
+```
+
+For physical hardware, configure the SDK environment above and select both
+hardware backends explicitly:
+
+```bash
+# Selected physical devices, feedback only
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=left_ crx_mock:=false sharpa_backend:=sharpa_sdk \
+  left_robot_ip:=192.168.2.100 read_only:=true
+```
+
+Use `read_only:=false` for writable control. Hand startup then configures its mode
+and enables motors even before a motion sender runs. The CRX limiter monitors
+only the selected arm. A threshold trip stops that arm, not the Sharpa fingers;
+an unexpected limiter exit shuts down the system launch. The single-arm mock
+initializes its wrench sensor to zero; mock hands do not fabricate tactile data.
+
+Optional clients retain their existing behavior:
+
+- `viewer:=true` starts the two-sided sensor window; the absent side shows
+  `NO DATA` and still has subscriptions, without starting its drivers.
+- The standalone Sharpa GUI enables the online panel independently, but still
+  creates both sides' command publishers and feedback subscriptions.
+- Cartesian/admittance senders must explicitly set `active_arms`, for example
+  `--ros-args -p 'active_arms:=[left]'` for the left arm.
+- Keyboard jogging uses `method:=quintic` (the default); select the active side with `1`
+  or `2`, then press `e`. Its inactive-side subscription remains present.
+- `hold_and_test`, waveform tools, and the combined `move_to_default_pose.py`
+  retain their existing dual-device assumptions; they are not single-side tools.
+
+After building, run the installed system mock checks explicitly:
+
+```bash
+SINGLE_SIDE_ROS_MOCK=1 python3 -m pytest -q \
+  src/bimanual_manipulation/test/test_single_side_launch.py
+```
+
 ## Unified Launch
 
 The validated hardware configuration is the default:
@@ -82,7 +166,7 @@ Use the same isolated ROS domain in all mock test terminals; use the devices' ex
 
 When `method` is omitted, the launch inherits `dual_crx_control`'s `quintic` (fifth-degree polynomial) interpolation, with a default target input rate of 100 Hz and interpolation output rate of 500 Hz. Hardware hands default to MIT control with SDK position interpolation disabled (`interpolation: false`); the CRX arms retain their existing position-control path.
 
-Example overrides include `method:=linear input_rate_hz:=100` and `sharpa_config:=/absolute/path/hands.yaml`. List all arguments with:
+Example overrides include `method:=quintic input_rate_hz:=100` and `sharpa_config:=/absolute/path/hands.yaml`. List all arguments with:
 
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py --show-args

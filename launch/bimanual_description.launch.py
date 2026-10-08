@@ -8,15 +8,16 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
 
-from bimanual_manipulation.composite_description import build_description
+from bimanual_manipulation.composite_description import build_description, selected_sides
 
 
 def _nodes(context):
-    description = build_description(LaunchConfiguration('hand_mounts').perform(context) or None)
-    sources = [
-        '/crx5ia/left/joint_states', '/crx5ia/right/joint_states',
-        '/sharpa/left_hand/joint_states', '/sharpa/right_hand/joint_states',
-    ]
+    selection = LaunchConfiguration('sides', default='both').perform(context)
+    sides = selected_sides(selection)
+    description = build_description(
+        LaunchConfiguration('hand_mounts').perform(context) or None, sides=selection)
+    sources = ([f'/crx5ia/{side}/joint_states' for side in sides]
+               + [f'/sharpa/{side}_hand/joint_states' for side in sides])
     return [
         Node(
             package='joint_state_publisher', executable='joint_state_publisher',
@@ -43,6 +44,7 @@ def _nodes(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument('sides', default_value='both', choices=['both', 'left', 'right']),
         DeclareLaunchArgument('hand_mounts', default_value='',
                               description='Path to calibrated or mock hand_mounts.yaml'),
         DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
