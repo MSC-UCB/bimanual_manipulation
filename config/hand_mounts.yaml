@@ -2,7 +2,8 @@
 # description for physical motion planning or collision decisions.
 left:
   xyz: [0.0, 0.0, 0.0]
-  rpy: [0.0, 0.0, 0.0]
+  rpy: [0.0, 1.570796, 0.0]
+
 right:
   xyz: [0.0, 0.0, 0.0]
-  rpy: [0.0, 0.0, 0.0]
+  rpy: [3.14159265359, -1.57079665359, 0.0]

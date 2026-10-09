@@ -32,22 +32,21 @@ Start one CRX arm and the Sharpa hand on the same side with
 `single_arm_hand.launch.py`. Select `prefix:=left_` or `prefix:=right_`.
 
 ```bash
-# Left arm + left hand, software mock
-ros2 launch bimanual_manipulation single_arm_hand.launch.py \
-  prefix:=left_ crx_mock:=true sharpa_backend:=mock
+# Left arm + left hand, software mock with RViz (defaults)
+ros2 launch bimanual_manipulation single_arm_hand.launch.py
 
 # Right arm + right hand, with the combined model in RViz
 ros2 launch bimanual_manipulation single_arm_hand.launch.py \
-  prefix:=right_ crx_mock:=true sharpa_backend:=mock rviz:=true
+  prefix:=right_
 
 # Feedback only for the selected arm and hand
 ros2 launch bimanual_manipulation single_arm_hand.launch.py \
   prefix:=left_ crx_mock:=true sharpa_backend:=mock read_only:=true
 ```
 
-The new launch defaults to `prefix:=left_`, `crx_mock:=true`,
-`sharpa_backend:=mock`, `rviz:=false`, and `viewer:=false`. The existing
-`bimanual_system.launch.py` retains its hardware-first defaults.
+This launch defaults to `prefix:=left_`, `crx_mock:=true`,
+`sharpa_backend:=mock`, `rviz:=true`, and `viewer:=false`. Both system launches
+use software mock hardware and show RViz by default; pass `rviz:=false` to hide it.
 Only the selected arm controller manager and hand driver are started. No motion
 sender or default-pose routine is started automatically.
 
@@ -56,9 +55,9 @@ The combined model and `/bimanual/joint_states` contain 28 movable joints:
 offset, and hand mount are preserved. The inactive branch is removed from the
 combined model, and the merger subscribes only to the selected arm and hand.
 Arm-stack TF remains isolated; the combined publisher owns global model TF.
-The underlying CRX description topic may still contain its original dual-arm
-model. The current hand mount defaults are placeholders, not a measured mounting
-calibration or a new fingertip TCP definition.
+The underlying CRX description also contains only the selected arm.
+Set `hand_mounts` to the actual mounting transform; this does not define a new
+fingertip TCP.
 
 The launch forwards the existing arm IP, interpolation, force-limit, Sharpa YAML,
 publication-rate, gain, and hand-mount arguments. The collision-force threshold
@@ -72,17 +71,31 @@ selected side. List all arguments with:
 ros2 launch bimanual_manipulation single_arm_hand.launch.py --show-args
 ```
 
-For physical hardware, configure the SDK environment above and select both
-hardware backends explicitly:
+For physical hardware, configure the SDK environment above and pass
+`crx_mock:=false sharpa_backend:=sharpa_sdk`. `prefix:=left_` selects the left
+arm and left hand; `prefix:=right_` selects the right arm and right hand.
+The prefix selects the side, not whether the devices are real or simulated.
+Robot IPs are inherited automatically: left `192.168.2.100`, right `192.168.1.100`.
+Only pass `left_robot_ip` or `right_robot_ip` if your robot uses a different address.
+Configure the hand serial number in the Sharpa YAML.
 
 ```bash
+# Control the physical left arm + left hand
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=left_ crx_mock:=false sharpa_backend:=sharpa_sdk
+
+# Control the physical right arm + right hand
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=right_ crx_mock:=false sharpa_backend:=sharpa_sdk
+
 # Selected physical devices, feedback only
 ros2 launch bimanual_manipulation single_arm_hand.launch.py \
   prefix:=left_ crx_mock:=false sharpa_backend:=sharpa_sdk \
-  left_robot_ip:=192.168.2.100 read_only:=true
+  read_only:=true
 ```
 
-Use `read_only:=false` for writable control. Hand startup then configures its mode
+Writable control is the default; add `read_only:=true` for feedback only.
+With writable control, hand startup configures its mode
 and enables motors even before a motion sender runs. The CRX limiter monitors
 only the selected arm. A threshold trip stops that arm, not the Sharpa fingers;
 an unexpected limiter exit shuts down the system launch. The single-arm mock
@@ -110,13 +123,16 @@ SINGLE_SIDE_ROS_MOCK=1 python3 -m pytest -q \
 
 ## Unified Launch
 
-The validated hardware configuration is the default:
+The default starts both arms and hands in software mock mode, with RViz and the sensor viewer:
 
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py
 ```
 
-This is equivalent to `crx_mock:=false sharpa_backend:=sharpa_sdk mit_kp_ratio:=0.6 mit_kd_ratio:=0.8 collision_force_threshold_n:=50.0 viewer:=true wrench_force_max:=20 wrench_torque_max:=3`.
+This is equivalent to `crx_mock:=true sharpa_backend:=mock rviz:=true mit_kp_ratio:=0.6 mit_kd_ratio:=0.8 collision_force_threshold_n:=50.0 viewer:=true wrench_force_max:=20 wrench_torque_max:=3`.
+To control physical devices, explicitly pass `crx_mock:=false sharpa_backend:=sharpa_sdk`.
+This dual-side launch starts both sides and does not use `prefix`; use
+`single_arm_hand.launch.py` with `prefix:=left_` or `prefix:=right_` for one side.
 `wrench_force_max` and `wrench_torque_max` only change the viewer's display ranges; `collision_force_threshold_n` controls the CRX stop threshold.
 Explicit arguments override the defaults. Hand YAML values are used for MIT gain ratios only when the corresponding launch arguments are left empty.
 
@@ -130,11 +146,11 @@ ros2 launch bimanual_manipulation bimanual_system.launch.py \
 
 `read_only:=true` sets FANUC `motion_control` to `0` for both arms and starts only the joint-state and wrench broadcasters, without position controllers or interpolation nodes. The hands use the upstream `read_only` mode, without joint-command subscriptions or SDK motion-control configuration. This mode still establishes device connections and streams state data.
 
-Use normal control mode to run motion scripts afterward:
+Start both physical arms and hands in writable mode, then run control tools separately:
 
 ```bash
 ros2 launch bimanual_manipulation bimanual_system.launch.py \
-  crx_mock:=false sharpa_backend:=sharpa_sdk rviz:=true viewer:=true
+  crx_mock:=false sharpa_backend:=sharpa_sdk
 ```
 
 Normal control mode starts the underlying motion controllers. The launch does not automatically run the default-pose script. Do not run both modes simultaneously or start duplicate drivers for devices already in use.
@@ -152,7 +168,7 @@ Use the same isolated ROS domain in all mock test terminals; use the devices' ex
 
 | Argument | Default behavior |
 | --- | --- |
-| `crx_mock` / `sharpa_backend` | `false` / `sharpa_sdk` |
+| `crx_mock` / `sharpa_backend` | `true` / `mock` |
 | `read_only` | `false`; `true` disables motion control for both arms and hands |
 | `left_robot_ip` / `right_robot_ip` | Empty; inherits the arm launch defaults, currently `192.168.2.100` / `192.168.1.100` |
 | `method` / `input_rate_hz` | Empty; inherits the arm launch defaults, currently `quintic` / `100.0` |
@@ -163,7 +179,7 @@ Use the same isolated ROS domain in all mock test terminals; use the devices' ex
 | `sharpa_publish_rate_hz` | Empty; keeps the publication rate from the hand YAML |
 | `sharpa_read_only` | `false`; enables read-only mode for the hands independently; global `read_only=true` takes precedence |
 | `hand_mounts` | This package's `config/hand_mounts.yaml` |
-| `rviz` / `viewer` | `false` / `true` |
+| `rviz` / `viewer` | `true` / `true` |
 | `force_max` | Tactile heatmap upper limit: `15`, in SDK units |
 | `wrench_force_max` / `wrench_torque_max` | Bar display ranges: ±`20` N / ±`3` N·m |
 
@@ -211,6 +227,18 @@ recovery/gain tools together. The custom types are now
 `dual_sharpa_wave/action/RecoverDefault` and `dual_sharpa_wave/srv/MitGains`;
 external clients using the old `sharpa_control_interfaces` types must update.
 Existing bimanual launch commands and JointState topics are unchanged.
+
+## Keyboard and GUI Control
+
+Both tools work with `single_arm_hand.launch.py` and `bimanual_system.launch.py` using the default control settings. Keep the launch running, then start the tools in separate terminals with the ROS and workspace environments sourced. For CRX keyboard jogging, press `1` (left) or `2` (right), then `e` to enable; `w/s`, `a/d`, and `r/f` move the TCP along world X, Y, and Z, and Space disarms. For the Sharpa GUI, click **Load Current Pose**, adjust a joint, then click **Start Sending**; each online hand panel works independently. With a single-side launch, use only that side. Control is unavailable for devices launched in read-only mode. Run only one command sender per device; disarming or stopping GUI sending is not an emergency stop.
+
+```bash
+# CRX arm keyboard control
+ros2 run dual_crx_control keyboard_control.py
+
+# Sharpa hand GUI control (another terminal)
+ros2 run dual_sharpa_wave gui_control.py
+```
 
 ## Dual-Arm Collision Force Limiting
 

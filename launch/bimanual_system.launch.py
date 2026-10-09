@@ -1,4 +1,4 @@
-"""Combine the current arm/hand stacks, preserving their configuration defaults."""
+"""Start both arms and hands with software mock hardware and RViz by default."""
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -62,10 +62,10 @@ def _system(context):
 
 def generate_launch_description():
     arguments = [
-        DeclareLaunchArgument('crx_mock', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('crx_mock', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('read_only', default_value='false', choices=['true', 'false'],
                               description='Read both arms and hands without motion control'),
-        DeclareLaunchArgument('sharpa_backend', default_value='sharpa_sdk', choices=['mock', 'sharpa_sdk']),
+        DeclareLaunchArgument('sharpa_backend', default_value='mock', choices=['mock', 'sharpa_sdk']),
         DeclareLaunchArgument('sharpa_config', default_value='',
                               description='Hand YAML path; blank selects upstream backend config'),
         DeclareLaunchArgument('sharpa_publish_rate_hz', default_value='',
@@ -76,7 +76,7 @@ def generate_launch_description():
                               description='Startup Kd multiplier for both hands; blank uses YAML'),
         DeclareLaunchArgument('sharpa_read_only', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('hand_mounts', default_value=''),
-        DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('viewer', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('force_max', default_value='15', description='Tactile magnitude, SDK units'),
         DeclareLaunchArgument('resultant_force_max', default_value='15',

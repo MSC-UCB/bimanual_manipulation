@@ -82,7 +82,7 @@ def generate_launch_description():
                               description='Startup Kd multiplier for the selected hand; blank uses YAML'),
         DeclareLaunchArgument('sharpa_read_only', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('hand_mounts', default_value=''),
-        DeclareLaunchArgument('rviz', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('viewer', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('force_max', default_value='15', description='Tactile magnitude, SDK units'),
         DeclareLaunchArgument('resultant_force_max', default_value='15',
