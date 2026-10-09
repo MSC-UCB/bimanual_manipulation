@@ -9,10 +9,13 @@ Build from `/home/msc-crx/ws_fanuc`. The `bimanual_manipulation` source is in `s
 ```bash
 cd /home/msc-crx/ws_fanuc
 source /opt/ros/jazzy/setup.bash
-colcon build --symlink-install --packages-select \
-  sharpa_control_interfaces dual_crx_control dual_sharpa_wave bimanual_manipulation
+colcon build --symlink-install --packages-up-to bimanual_manipulation
 source install/setup.bash
 ```
+
+Sharpa's action and service are included in `dual_sharpa_wave`; no separate
+interface package is needed. Existing workspaces should first follow the
+[Sharpa migration guide](../dual_sharpa_wave_ros2/packages/dual_sharpa_wave/docs/migration.md).
 
 Source ROS and the workspace in every new terminal. Sharpa hardware also requires the installed SDK's Python modules and shared libraries:
 
@@ -190,20 +193,24 @@ Use `mit_kp_ratio:=0.6 mit_kd_ratio:=0.8` to set the startup Kp/Kd ratios indepe
 Both hands' logs should show `control_mode=mit, read_only=False`.
 
 Custom configurations can still be selected with `sharpa_config`. To use the original POSITION mode, specify
-`sharpa_config:=/home/msc-crx/ws_fanuc/src/dual_sharpa_wave_ros2/config/dual_sharpa_hardware.yaml`.
+`sharpa_config:=/home/msc-crx/ws_fanuc/src/dual_sharpa_wave_ros2/packages/dual_sharpa_wave/config/dual_sharpa_hardware.yaml`.
 
 The MIT YAML sets `interpolation:false`, 100 Hz state publication, and a 0.5 s command-idle threshold for both hands.
 The existing retargeting ROS command interface is unchanged: 20 Hz solving, 100 Hz publication, and 50 ms upstream interpolation remain supported.
 The state publication rate does not automatically generate motion commands. If valid commands stop for more than 0.5 s, the hand session and feedback remain active.
 When commands resume, control restarts from the latest feedback, retaining the check that the first target is within 0.1 rad of feedback.
 Normal completion of the homing script or switching teleoperation no longer requires a driver restart. Stopping publication does not disable the motors; the last MIT target may remain active. Actual SDK faults still close and lock the session.
-Additional local documentation, if retained, is available in `../dual_sharpa_wave_ros2/docs/mit_control.md`; it is not tracked in Git.
+See the [Sharpa control semantics](../dual_sharpa_wave_ros2/packages/dual_sharpa_wave/README.md#control-semantics) and [default-pose guide](../dual_sharpa_wave_ros2/packages/dual_sharpa_wave/docs/default_pose.md) for details.
 
 MIT now clamps command targets to the URDF limits. If measured feedback exceeds a limit by more than 5°, normal commands are locked while the connection and feedback remain active; the hands do not automatically return to zero.
 The existing `move_to_default_pose.py --execute` command requests hand homing recovery through a dedicated action. Successful recovery clears the lock without restarting the driver.
 Cancellation, heartbeat loss, or failure to reach the target ends recovery. Once a recovery has started, its completion leaves normal commands locked only if measured feedback still exceeds a limit by more than 5°; otherwise normal control resumes.
 Homing can be requested again. Only worsening limit violations during recovery or SDK faults close the SDK session.
-Build the added `sharpa_control_interfaces` package together with the others and source the workspace again. Restart any running driver once to load the updated version.
+Rebuild `dual_sharpa_wave` and source the workspace again. Restart the driver and
+recovery/gain tools together. The custom types are now
+`dual_sharpa_wave/action/RecoverDefault` and `dual_sharpa_wave/srv/MitGains`;
+external clients using the old `sharpa_control_interfaces` types must update.
+Existing bimanual launch commands and JointState topics are unchanged.
 
 ## Dual-Arm Collision Force Limiting
 
@@ -289,7 +296,7 @@ ros2 pkg prefix --share dual_sharpa_wave
 | `dual_sharpa_wave/config/dual_sharpa_wave.yaml` | Mock parameters |
 | This package's `config/hand_mounts.yaml` | Fixed transforms from each arm to its hand flange |
 
-The hand source directory is `src/dual_sharpa_wave_ros2`, while the ROS package name is `dual_sharpa_wave`. Arm joints are named `left_J1..J6` / `right_J1..J6`. Hand joints retain the original package's `joint_names(side)` without an additional namespace prefix.
+The hand source directory is `src/dual_sharpa_wave_ros2/packages/dual_sharpa_wave`, while the ROS package name is `dual_sharpa_wave`. Arm joints are named `left_J1..J6` / `right_J1..J6`. Hand joints retain the original package's `joint_names(side)` without an additional namespace prefix.
 
 - Arm feedback: `/crx5ia/{left,right}/joint_states`.
 - Wrench: `/crx5ia/{left,right}/force_torque_sensor_broadcaster/wrench`.
