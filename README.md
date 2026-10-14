@@ -277,6 +277,98 @@ The script calls the `move_to_default_pose.py` installed by each original packag
 
 The legacy `hold_and_test` remains a standalone motion-command tool. The launch does not start it automatically, and it is not intended for read-only checks.
 
+## Optional RealSense Cameras
+
+Both system launches accept `enable_wrist_camera:=true` (both wrist cameras) and
+`enable_fix_camera:=true` (one fixed camera). Both default to `false`. These
+switches are independent of robot mock/read-only settings and of the single-arm
+`prefix`. `viewer:=true` displays the images; with `viewer:=false`, cameras still
+publish ROS images. The single-arm launch defaults to `viewer:=false`.
+
+Install the driver before enabling cameras:
+
+```bash
+sudo apt-get install ros-jazzy-realsense2-camera ros-jazzy-cv-bridge
+```
+
+Edit [`config/cameras.yaml`](config/cameras.yaml) and fill in **quoted serial
+numbers** for the enabled roles. All serials are intentionally blank until the
+physical positions are confirmed. `rs-enumerate-devices -s` lists connected
+serials. Missing, non-string or duplicate serials among enabled roles are errors;
+the launch never selects an arbitrary device. Disabled roles can stay blank.
+Use `camera_config:=/absolute/path/cameras.yaml` to select a separate config.
+
+```yaml
+wrist_left:
+  serial_no: ""                  # Fill the physical LEFT wrist serial
+  color_profile: "640x480x30"    # WIDTHxHEIGHTxFPS
+  enable_depth: false
+  depth_profile: "640x480x30"
+wrist_right:
+  serial_no: ""                  # Fill the physical RIGHT wrist serial
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+fixed:
+  serial_no: ""                  # Fill the fixed camera serial
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+```
+
+Camera models are not hard-coded. When replacing a RealSense, update its serial
+and supported profiles. The launch sets both `rgb_camera.color_profile` and
+D405's `depth_module.color_profile` from `color_profile`. Profile availability
+depends on the model, firmware and USB connection. Other camera brands require
+a different driver publishing the same image topics.
+
+After rebuilding and sourcing the workspace:
+
+```bash
+# Both D405 wrist cameras; existing arms/hands remain in mock mode by default
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  enable_wrist_camera:=true viewer:=true
+
+# All three cameras (fill all three serials first)
+ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  enable_wrist_camera:=true enable_fix_camera:=true viewer:=true
+
+# Single arm + hand, with BOTH wrist cameras
+ros2 launch bimanual_manipulation single_arm_hand.launch.py \
+  prefix:=left_ enable_wrist_camera:=true viewer:=true
+
+# Cameras only, without starting any arm or hand drivers
+ros2 launch bimanual_manipulation cameras.launch.py enable_wrist_camera:=true
+
+# Separate viewer for existing camera/sensor drivers; does not open USB devices
+ros2 run bimanual_manipulation tactile_wrench_viewer.py --enable-wrist-camera
+```
+
+The sensor viewer adds a right column with `LEFT WRIST`, `RIGHT WRIST` and
+`FIXED` images whenever either camera switch is enabled. Its original sensor
+layout remains unchanged when both are disabled. Images retain their aspect
+ratio. Camera states are `DISABLED`, `NO DATA`, `LIVE`, `STALE` and
+`INVALID DATA`. Each camera keeps only the newest received frame with best-effort,
+depth-1 subscriptions; stale images are dimmed. One unavailable camera does not
+block other images or sensor rendering. Camera restart/reconnection is handled
+by the upstream driver; no synchronized capture is promised.
+
+| Role | Color image topic |
+| --- | --- |
+| `wrist_left` | `/camera/wrist_left/color/image_raw` |
+| `wrist_right` | `/camera/wrist_right/color/image_raw` |
+| `fixed` | `/camera/fixed/color/image_raw` |
+
+For a headless PNG and JSON status snapshot, add
+`--snapshot /tmp/bimanual-cameras.png --duration 5` to the standalone viewer.
+Add `--enable-fix-camera` when the fixed view is wanted. Camera status keys are
+`camera/wrist_left`, `camera/wrist_right`, and `camera/fixed`.
+
+This first version displays color images only. Depth can be enabled per camera,
+but the viewer does not render it. Point clouds, depth alignment, camera TF and
+IMU streams are disabled. RViz remains the robot-model view; camera mounting
+transforms, calibration, recording and synchronization are outside this feature.
+
 ## Unified Sensor Window
 
 Start the viewer separately when drivers are already running:

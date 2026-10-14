@@ -1,0 +1,21 @@
+# Fill quoted serial numbers after identifying the physical camera positions.
+# Connected D405 candidates: "260522273536", "260522275388" (sides unconfirmed).
+# Disabled roles may stay blank. No model name is hard-coded; use profiles
+# supported by the replacement RealSense. Profiles are WIDTHxHEIGHTxFPS.
+wrist_left:
+  serial_no: ""
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+
+wrist_right:
+  serial_no: ""
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+
+fixed:
+  serial_no: ""
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"

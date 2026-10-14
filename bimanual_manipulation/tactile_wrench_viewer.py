@@ -1,4 +1,4 @@
-"""ROS subscriptions only: wrench bars, tactile heatmaps and F6 magnitude bars."""
+"""ROS subscriptions only: wrench, tactile, F6 and optional camera images."""
 
 import argparse
 import json
@@ -14,22 +14,44 @@ import numpy as np
 from dual_sharpa_wave.tactile import FINGERS, f6_array
 from dual_sharpa_wave.tactile_viewer import DisplayData, force_heatmap, text
 
+from .cameras import CAMERA_ROLES, CAMERA_LABELS, enabled_roles, image_topic
+
 SIDES = ('left', 'right')
 LABELS = ('Fx', 'Fy', 'Fz', 'Tx', 'Ty', 'Tz')
 WINDOW = 'Bimanual | wrench and tactile'
 WIDTH, HEIGHT = 1400, 870
+CAMERA_WIDTH = 480
 TILE_W, TILE_H = 264, 180
 HEAT_W = 180
 BG, PANEL = (24, 26, 30), (37, 40, 45)
 
 
 class SensorData:
-    def __init__(self):
+    def __init__(self, camera_roles=()):
+        self.camera_roles = tuple(camera_roles)
+        self.cameras = {}
+        self.camera_errors = set()
+        self.bridge = None
+        if self.camera_roles:
+            from cv_bridge import CvBridge
+            self.bridge = CvBridge()
         self.tactile = DisplayData()
         self.wrenches = {}
         self.errors = {}
         self.resultants = {}
         self.resultant_errors = set()
+
+    def receive_camera(self, role, message, now):
+        from cv_bridge import CvBridgeError
+        try:
+            picture = self.bridge.imgmsg_to_cv2(message, desired_encoding='bgr8')
+            if picture.ndim != 3 or picture.shape[2] != 3 or not picture.size:
+                raise ValueError('invalid color image dimensions')
+        except (CvBridgeError, ValueError, TypeError, cv2.error):
+            self.camera_errors.add(role)
+            return
+        self.cameras[role] = (picture.copy(), now)
+        self.camera_errors.discard(role)
 
     def receive_f6(self, side, finger, message, now):
         key = (side, finger)
@@ -75,6 +97,14 @@ class SensorData:
                     'INVALID DATA' if key in self.tactile.errors else
                     'NO DATA' if sample is None else
                     'STALE' if now - sample.received > stale_after else 'LIVE')
+        if self.camera_roles:
+            for role in CAMERA_ROLES:
+                sample = self.cameras.get(role)
+                result[f'camera/{role}'] = (
+                    'DISABLED' if role not in self.camera_roles else
+                    'INVALID DATA' if role in self.camera_errors else
+                    'NO DATA' if sample is None else
+                    'STALE' if now - sample[1] > stale_after else 'LIVE')
         return result
 
 
@@ -84,7 +114,8 @@ def bar_extent(value, maximum, half_width):
 
 def render(data, *, now, force_max=15., resultant_force_max=15.,
            wrench_force_max=10., wrench_torque_max=5., stale_after=1.):
-    canvas = np.full((HEIGHT, WIDTH, 3), BG, np.uint8)
+    width = WIDTH + CAMERA_WIDTH if data.camera_roles else WIDTH
+    canvas = np.full((HEIGHT, width, 3), BG, np.uint8)
     status = data.status(now, stale_after)
     text(canvas, 'BIMANUAL | force / torque and fingertip force magnitude', 20, 27, scale=.65)
     for side_index, side in enumerate(SIDES):
@@ -164,7 +195,36 @@ def render(data, *, now, force_max=15., resultant_force_max=15.,
     canvas[840:852, 1110:1366] = cv2.applyColorMap(ramp, cv2.COLORMAP_JET)
     text(canvas, f'Tactile: 0 ... {force_max:g} (SDK units) | fixed shared color scale', 20, 850, scale=.48)
     text(canvas, 'q / Esc: close | subscriptions only', 665, 850, scale=.43)
+    if data.camera_roles:
+        render_cameras(canvas, data, status, now)
     return canvas
+
+
+def render_cameras(canvas, data, status, now):
+    for index, (role, label) in enumerate(zip(CAMERA_ROLES, CAMERA_LABELS)):
+        x, top = WIDTH + 15, index * 290
+        state = status[f'camera/{role}']
+        text(canvas, f'{label}  {state}', x, top + 27, scale=.5)
+        tile_h, tile_w = 230, CAMERA_WIDTH - 30
+        tile = np.full((tile_h, tile_w, 3), PANEL, np.uint8)
+        sample = data.cameras.get(role)
+        if sample is not None and state in ('LIVE', 'STALE'):
+            picture = sample[0]
+            height, width = picture.shape[:2]
+            ratio = min(tile_w / width, tile_h / height)
+            picture = cv2.resize(picture, (max(1, round(width * ratio)),
+                                          max(1, round(height * ratio))),
+                                 interpolation=cv2.INTER_AREA)
+            height, width = picture.shape[:2]
+            y0, x0 = (tile_h - height) // 2, (tile_w - width) // 2
+            tile[y0:y0+height, x0:x0+width] = picture
+            if state == 'STALE':
+                tile //= 4
+        if state != 'LIVE':
+            text(tile, state, 15, tile_h // 2, (70, 150, 240), .6)
+        canvas[top+38:top+38+tile_h, x:x+tile_w] = tile
+        if sample is not None:
+            text(canvas, f'age {max(0., now - sample[1]):.1f}s', x, top + 284, scale=.4)
 
 
 def parse_args(argv=None):
@@ -172,6 +232,8 @@ def parse_args(argv=None):
     for name, default in (('force-max', 15.), ('resultant-force-max', 15.), ('wrench-force-max', 10.),
                           ('wrench-torque-max', 5.), ('stale-after', 1.), ('duration', 5.)):
         parser.add_argument('--' + name, type=float, default=default)
+    parser.add_argument('--enable-wrist-camera', action='store_true', help='Show both wrist camera topics')
+    parser.add_argument('--enable-fix-camera', action='store_true', help='Show the fixed camera topic')
     parser.add_argument('--snapshot', type=Path, help='Headless: save PNG and status JSON after --duration seconds')
     args = parser.parse_args(argv)
     for name in ('force_max', 'resultant_force_max', 'wrench_force_max', 'wrench_torque_max', 'stale_after', 'duration'):
@@ -187,6 +249,10 @@ def subscribe(node, data):
     from sensor_msgs.msg import Image
     from std_msgs.msg import Float64MultiArray
     qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+    for role in data.camera_roles:
+        node.create_subscription(
+            Image, image_topic(role),
+            lambda msg, role=role: data.receive_camera(role, msg, time.monotonic()), qos)
     for side in SIDES:
         node.create_subscription(
             WrenchStamped, f'/crx5ia/{side}/force_torque_sensor_broadcaster/wrench',
@@ -215,13 +281,13 @@ def main(argv=None):
         return 1
     rclpy.init(args=cli[1:])
     node = None
-    data = SensorData()
     try:
+        data = SensorData(enabled_roles(args.enable_wrist_camera, args.enable_fix_camera))
         node = Node('tactile_wrench_viewer')
         subscribe(node, data)
         if args.snapshot is None:
             cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(WINDOW, WIDTH, HEIGHT)
+            cv2.resizeWindow(WINDOW, WIDTH + (CAMERA_WIDTH if data.camera_roles else 0), HEIGHT)
         began = time.monotonic()
         while rclpy.ok():
             deadline = time.monotonic() + .025
