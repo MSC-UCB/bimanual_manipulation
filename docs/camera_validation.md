@@ -65,3 +65,26 @@ After the hardware checks, the user installed the system dependencies. Confirmed
 `/opt/ros/jazzy`; the camera executable has no missing shared libraries and
 `CvBridge` imports successfully. The temporary package extraction is no longer
 needed for normal use. Serial numbers remain intentionally blank.
+
+## Three-camera configuration and stream check
+
+The user subsequently confirmed the mounting roles, and device enumeration found
+all three cameras. `config/cameras.yaml` now contains:
+
+| Role | Model | Serial |
+| --- | --- | --- |
+| Left wrist | D405 | `260522275388` |
+| Right wrist | D405 | `260522273536` |
+| Fixed | D415 | `347322060270` |
+
+Using the installed system driver and the default installed config, the standalone
+camera launch streamed all three color images simultaneously. The viewer snapshot
+reported all three camera roles `LIVE`. All roles requested 640 × 480 at 30 FPS,
+with depth disabled. The 19 camera tests passed after removing the obsolete
+assertion that the editable config must always contain blank serials.
+
+Snapshot and logs: `/tmp/bimanual-camera-validation/three_cameras.png`,
+`three_cameras.json`, and `three_cameras.log`. No robot drivers were started;
+camera test processes were stopped afterward. Physical USB unplug/replug and
+camera calibration remain unverified. Both launch enable flags still default to
+`false`.

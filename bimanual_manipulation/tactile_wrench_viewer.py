@@ -210,6 +210,8 @@ def render_cameras(canvas, data, status, now):
         sample = data.cameras.get(role)
         if sample is not None and state in ('LIVE', 'STALE'):
             picture = sample[0]
+            if role in ('wrist_left', 'wrist_right'):
+                picture = cv2.rotate(picture, cv2.ROTATE_180)
             height, width = picture.shape[:2]
             ratio = min(tile_w / width, tile_h / height)
             picture = cv2.resize(picture, (max(1, round(width * ratio)),

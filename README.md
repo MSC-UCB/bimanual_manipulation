@@ -292,8 +292,9 @@ sudo apt-get install ros-jazzy-realsense2-camera ros-jazzy-cv-bridge
 ```
 
 Edit [`config/cameras.yaml`](config/cameras.yaml) and fill in **quoted serial
-numbers** for the enabled roles. All serials are intentionally blank until the
-physical positions are confirmed. `rs-enumerate-devices -s` lists connected
+numbers** for the enabled roles. The current config maps left wrist D405
+`260522275388`, right wrist D405 `260522273536`, and fixed D415 `347322060270`.
+The template below uses blank placeholders; `rs-enumerate-devices -s` lists connected
 serials. Missing, non-string or duplicate serials among enabled roles are errors;
 the launch never selects an arbitrary device. Disabled roles can stay blank.
 Use `camera_config:=/absolute/path/cameras.yaml` to select a separate config.
@@ -347,7 +348,8 @@ ros2 run bimanual_manipulation tactile_wrench_viewer.py --enable-wrist-camera
 The sensor viewer adds a right column with `LEFT WRIST`, `RIGHT WRIST` and
 `FIXED` images whenever either camera switch is enabled. Its original sensor
 layout remains unchanged when both are disabled. Images retain their aspect
-ratio. Camera states are `DISABLED`, `NO DATA`, `LIVE`, `STALE` and
+ratio. Both wrist images are rotated 180 degrees for display (including snapshots);
+the fixed image and published ROS images keep their original orientation. Camera states are `DISABLED`, `NO DATA`, `LIVE`, `STALE` and
 `INVALID DATA`. Each camera keeps only the newest received frame with best-effort,
 depth-1 subscriptions; stale images are dimmed. One unavailable camera does not
 block other images or sensor rendering. Camera restart/reconnection is handled

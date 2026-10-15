@@ -42,7 +42,6 @@ def test_disabled_cameras_need_neither_config_nor_driver(monkeypatch):
     monkeypatch.setattr(module, 'get_package_share_directory', lambda name: pytest.fail(name))
     assert module._cameras(ctx) == []
     assert load_camera_config('/does/not/exist', ()) == {}
-    assert all(v['serial_no'] == '' for v in yaml.safe_load((ROOT / 'config/cameras.yaml').read_text()).values())
 
 
 @pytest.mark.parametrize('entry,match', [
