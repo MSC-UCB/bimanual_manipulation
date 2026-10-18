@@ -44,7 +44,15 @@ def _system(context):
         'mit_kd_ratio': LaunchConfiguration('mit_kd_ratio', default='').perform(context),
         'read_only': 'true' if value('read_only') == 'true' else value('sharpa_read_only'),
     }
+    camera_args = {name: value(name) for name in
+                   ('enable_wrist_camera', 'enable_fix_camera', 'camera_config')}
+    camera_flags = [flag for name, flag in (
+        ('enable_wrist_camera', '--enable-wrist-camera'),
+        ('enable_fix_camera', '--enable-fix-camera')) if camera_args[name] == 'true']
+    camera_actions = ([GroupAction([_include(
+        'bimanual_manipulation', 'cameras.launch.py', camera_args)])] if camera_flags else [])
     return [
+        *camera_actions,
         GroupAction([
             *unset,
             SetRemap(src='/tf', dst='/crx5ia/arm_only_tf'),
@@ -60,13 +68,18 @@ def _system(context):
              arguments=['--force-max', value('force_max'),
                         '--resultant-force-max', value('resultant_force_max'),
                         '--wrench-force-max', value('wrench_force_max'),
-                        '--wrench-torque-max', value('wrench_torque_max')],
+                        '--wrench-torque-max', value('wrench_torque_max'), *camera_flags],
              condition=IfCondition(LaunchConfiguration('viewer'))),
     ]
 
 
 def generate_launch_description():
     arguments = [
+        DeclareLaunchArgument('enable_wrist_camera', default_value='false', choices=['true', 'false'],
+                              description='Enable both wrist cameras, independent of arm selection'),
+        DeclareLaunchArgument('enable_fix_camera', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('camera_config', default_value='',
+                              description='Camera role YAML; blank uses installed config/cameras.yaml'),
         DeclareLaunchArgument('prefix', default_value='left_', choices=['left_', 'right_']),
         DeclareLaunchArgument('crx_mock', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('read_only', default_value='false', choices=['true', 'false'],
