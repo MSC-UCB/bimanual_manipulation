@@ -149,3 +149,32 @@ def test_camera_subscriptions_and_cli_flags():
             f'/camera/{role}/color/image_raw' for role in roles]
         for role in roles:
             assert data.status(1., 1.)[f'camera/{role}'] == 'NO DATA'
+
+
+def test_pointcloud_requires_depth(tmp_path):
+    path = write_config(tmp_path, fixed={'serial_no': '123', 'enable_pointcloud': True})
+    with pytest.raises(ValueError, match='requires enable_depth'):
+        load_camera_config(path, ('fixed',))
+
+
+@pytest.mark.parametrize('flag', ['enable_pointcloud', 'publish_tf', 'enable_sync'])
+def test_camera_geometry_flags_are_boolean(tmp_path, flag):
+    path = write_config(tmp_path, fixed={'serial_no': '123', flag: 'true'})
+    with pytest.raises(ValueError, match='boolean'):
+        load_camera_config(path, ('fixed',))
+
+
+def test_pointcloud_config_routes_only_to_selected_role(tmp_path, monkeypatch):
+    module, ctx = load_launch('cameras.launch.py')
+    path = write_config(tmp_path, fixed={'serial_no': '123', 'enable_depth': True,
+        'enable_pointcloud': True, 'publish_tf': True, 'enable_sync': True})
+    ctx.launch_configurations.update(enable_wrist_camera='true', enable_fix_camera='true', camera_config=str(path))
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda name: '/fake/share')
+    monkeypatch.setattr(module, 'GroupAction', lambda **kwargs: kwargs)
+    monkeypatch.setattr(module, 'IncludeLaunchDescription', lambda source, launch_arguments: dict(launch_arguments))
+    groups = module._cameras(ctx)
+    for index, group in enumerate(groups):
+        params = group['actions'][0]
+        for key in ('enable_depth', 'pointcloud.enable', 'publish_tf', 'enable_sync'):
+            assert params[key] == ('true' if index == 2 else 'false')
+        assert params['align_depth.enable'] == 'false'

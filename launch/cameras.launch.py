@@ -38,8 +38,9 @@ def _cameras(context):
             'depth_module.depth_profile': config['depth_profile'],
             'enable_infra': 'false', 'enable_infra1': 'false', 'enable_infra2': 'false',
             'enable_gyro': 'false', 'enable_accel': 'false',
-            'pointcloud.enable': 'false', 'align_depth.enable': 'false',
-            'enable_sync': 'false', 'publish_tf': 'false',
+            'pointcloud.enable': str(config['enable_pointcloud']).lower(), 'align_depth.enable': 'false',
+            'enable_sync': str(config['enable_sync']).lower(),
+            'publish_tf': str(config['publish_tf']).lower(),
         }
         # A fresh scope prevents robot-launch or sibling-driver settings leaking in.
         actions.append(GroupAction(scoped=True, forwarding=False, actions=[

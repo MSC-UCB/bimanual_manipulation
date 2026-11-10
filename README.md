@@ -371,6 +371,32 @@ but the viewer does not render it. Point clouds, depth alignment, camera TF and
 IMU streams are disabled. RViz remains the robot-model view; camera mounting
 transforms, calibration, recording and synchronization are outside this feature.
 
+
+### Optional geometry streams for passive consumers
+
+The per-role `camera_config` also accepts boolean `enable_pointcloud`, `publish_tf`
+and `enable_sync` fields. All default to `false`, preserving the RGB viewer behavior.
+`enable_pointcloud: true` requires `enable_depth: true`. Unknown keys and non-boolean
+flags are rejected. For the fixed camera, use a separate YAML such as:
+
+```yaml
+fixed:
+  serial_no: "347322060270"
+  color_profile: "640x480x30"
+  depth_profile: "640x480x30"
+  enable_depth: true
+  enable_pointcloud: true
+  publish_tf: true
+  enable_sync: true
+```
+
+Pass its absolute path with `camera_config:=...` and `enable_fix_camera:=true` to
+`bimanual_system.launch.py` or `cameras.launch.py`. Keep a single driver per serial.
+The point cloud is `/camera/fixed/depth/color/points`; read its header frame rather
+than assuming the name means color optical coordinates. Published TF is internal
+camera geometry, not a calibrated camera-to-world transform. Depth alignment remains
+disabled. Calibration, segmentation and inference belong to the passive consumer.
+
 ## Unified Sensor Window
 
 Start the viewer separately when drivers are already running:

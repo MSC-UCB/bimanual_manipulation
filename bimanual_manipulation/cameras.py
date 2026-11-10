@@ -29,7 +29,8 @@ def load_camera_config(path, roles):
     if not isinstance(config, dict):
         raise ValueError('camera_config must contain a mapping of camera roles')
     result, serials = {}, set()
-    allowed = {'serial_no', 'color_profile', 'depth_profile', 'enable_depth'}
+    flags = ('enable_depth', 'enable_pointcloud', 'publish_tf', 'enable_sync')
+    allowed = {'serial_no', 'color_profile', 'depth_profile', *flags}
     for role in roles:
         entry = config.get(role)
         if not isinstance(entry, dict):
@@ -52,9 +53,12 @@ def load_camera_config(path, roles):
             if not isinstance(profile, str) or not re.fullmatch(r'[1-9][0-9]*x[1-9][0-9]*x[1-9][0-9]*', profile):
                 raise ValueError(f'{role}: {key} must be WIDTHxHEIGHTxFPS, e.g. "640x480x30"')
             settings[key] = profile
-        depth = entry.get('enable_depth', False)
-        if not isinstance(depth, bool):
-            raise ValueError(f'{role}: enable_depth must be a YAML boolean')
-        settings['enable_depth'] = depth
+        for key in flags:
+            value = entry.get(key, False)
+            if not isinstance(value, bool):
+                raise ValueError(f'{role}: {key} must be a YAML boolean')
+            settings[key] = value
+        if settings['enable_pointcloud'] and not settings['enable_depth']:
+            raise ValueError(f'{role}: enable_pointcloud requires enable_depth')
         result[role] = settings
     return result
